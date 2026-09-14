@@ -48,6 +48,7 @@ const QUERY = `
     COMPROBANTE_NUMERO AS comprobante_numero,
     COMPROBANTE_TIPO AS comprobante_tipo,
     CONDICION_DE_VENTA AS condicion_venta,
+    TRIM(ITEM_ARTICULO) AS item_codigo,
     ITEM_DESCRIPCION AS item_descripcion,
     ITEM_CANTIDAD AS item_cantidad,
     ITEM_PRECIO_UNITARIO AS item_precio_unitario,
@@ -125,6 +126,7 @@ module.exports = async (req, res) => {
       const itemNeto = row.item_neto || 0;
       const itemCantidad = row.item_cantidad || 0;
       comprobante.items.push({
+        codigo: row.item_codigo || "",
         descripcion: row.item_descripcion,
         cantidad: itemCantidad,
         precio_unitario: row.item_precio_unitario || 0,

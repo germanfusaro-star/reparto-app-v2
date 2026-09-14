@@ -84,6 +84,8 @@ monto devuelto sea el real que pagó el cliente por esa unidad, no el precio de 
 - **Completa**: se destildan todas las cantidades (por si venían marcadas de haber
   probado "Parcial" antes de corregir el estado).
 - **Parcial**: el chofer marca artículo por artículo cuánto vuelve.
+- Cada artículo muestra su código (`ITEM_ARTICULO` de bq_ventas, campo `codigo` en el
+  ítem) debajo de la descripción, junto con la cantidad pedida y el N° de comprobante.
 - El motivo de la devolución (`motivoDevolucion`, tabla de motivos de nc del ERP) sigue
   siendo **uno solo por cliente**, no por artículo — decisión tomada con Germán para no
   agregarle más carga al chofer.
