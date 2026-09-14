@@ -13,7 +13,17 @@ alertas, transferencias, avisos) es igual a la V1.
 filtrando por `GUIA_ID` y devuelve el manifiesto agrupado por cliente → comprobante →
 artículo (antes se agrupaba directo a nivel comprobante con `SUM(ITEM_NETO)`; ahora se
 trae cada línea de artículo tal cual está en la tabla, y el monto por comprobante/cliente
-se sigue calculando sumando esas líneas):
+se sigue calculando sumando esas líneas).
+
+**Importante — el campo `neto`/`item_neto` usa `ITEM_FINAL`, no `ITEM_NETO`.** `ITEM_NETO`
+es el subtotal de la factura SIN IVA; `ITEM_FINAL` es el monto real (neto + IVA +
+impuestos internos), el que efectivamente hay que cobrarle al cliente — y también el que
+hay que descontar si un artículo vuelve. Se detectó con Germán el 2026-09-14 comparando
+contra el ERP: usar `ITEM_NETO` hacía que el total y el descuento por devolución quedaran
+~20% por debajo de lo real en cualquier comprobante con IVA discriminado (prácticamente
+todos). El campo sigue llamándose `neto`/`item_neto` en el código por no romper nada que
+ya lo usa, pero el valor que trae es el final con IVA incluido. El mismo fix se aplicó en
+la V1 de producción (`reparto-app/api/guia.js`), porque tenía el mismo problema.
 
 ```json
 {
@@ -64,9 +74,9 @@ En la pantalla de entrega, cuando el estado es **Parcial** o **No entregó**, en
 campo "Monto devuelto" aparece la lista de artículos del pedido con un selector +/- de
 cantidad devuelta por línea (`cambiarCantidad()` / `setCantidadDevuelta()` en
 `DetalleCliente.jsx`). El monto devuelto se calcula solo, sumando por cada artículo
-marcado: `cantidadDevuelta × (item.neto / item.cantidad)` — se usa el neto dividido la
-cantidad pedida (no el precio de lista) para que cualquier descuento que ya tenía el
-artículo se respete proporcionalmente.
+marcado: `cantidadDevuelta × (item.neto / item.cantidad)` — se usa `item.neto` (que trae
+`ITEM_FINAL`, con IVA y descuentos ya incluidos) dividido la cantidad pedida, para que el
+monto devuelto sea el real que pagó el cliente por esa unidad, no el precio de lista.
 
 - **No entregó**: se marca automáticamente la cantidad devuelta al máximo en todos los
   artículos (vuelve el pedido entero) — el chofer no tiene que tocar nada, la lista queda
