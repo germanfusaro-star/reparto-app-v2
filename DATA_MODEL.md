@@ -330,3 +330,13 @@ en el componente compartido `Cierre.jsx` (chofer al cerrar la guía, y panel de 
 abrir el detalle de cualquier guía vía `AdminGuiaDetalle.jsx`), y se exportan también en el
 CSV de rendición (`src/data/guias.js` expone `listarTransferenciasDeGuia()` igual que
 `listarChequesDeGuia()`).
+
+**Las pastillas abren su detalle al tocarlas, no se muestran todas de una.** Devuelto,
+Cta. corriente, Transferencias y Cheques son botones (`tot-tile clickable`) — al tocar
+uno se abre, debajo del grid de totales, un panel con el detalle consolidado de esa guía
+(y toca otra vez para cerrarlo; tocar una pastilla distinta cambia el panel). El de
+"Devuelto" muestra cada artículo devuelto (cliente, código, descripción, cantidad y
+monto), armado con `listarArticulosDevueltosDeGuia()` recorriendo
+`comprobantes[].items[].cantidadDevuelta` de todos los clientes. El de "Cta. corriente"
+lista los clientes con `montoCtaCte > 0`. Efectivo y "Neto a rendir" quedan como pastillas
+simples, sin detalle desplegable, porque no tienen un desglose adicional que mostrar.

@@ -4,7 +4,13 @@
 
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
-import { listarClientes, listarChequesDeGuia, listarTransferenciasDeGuia, calcularTotalesYAlertas } from "./guias";
+import {
+  listarClientes,
+  listarChequesDeGuia,
+  listarTransferenciasDeGuia,
+  listarArticulosDevueltosDeGuia,
+  calcularTotalesYAlertas,
+} from "./guias";
 import { describirMotivoDevolucion } from "../lib/motivosDevolucion";
 
 const MAX_GUIAS = 300; // suficiente para meses de reparto diario; evita traer la colección entera
@@ -25,8 +31,9 @@ export async function calcularResumenGuia(guiaId) {
   const clientes = await listarClientes(guiaId);
   const cheques = await listarChequesDeGuia(guiaId);
   const transferencias = await listarTransferenciasDeGuia(guiaId);
+  const articulosDevueltos = await listarArticulosDevueltosDeGuia(guiaId);
   const { alertas, ...totales } = calcularTotalesYAlertas(clientes);
-  return { totales, alertas, cheques, transferencias, clientes };
+  return { totales, alertas, cheques, transferencias, articulosDevueltos, clientes };
 }
 
 function dentroDeRango(fecha, desde, hasta) {

@@ -284,3 +284,33 @@ export async function listarTransferenciasDeGuia(guiaId) {
   });
   return transferencias;
 }
+
+/**
+ * Todos los artículos devueltos (cantidadDevuelta > 0) de toda la guía, consolidados en
+ * una sola lista — para que el chofer pueda controlar la devolución completa al rendir,
+ * en vez de tener que entrar cliente por cliente. Ver "Devolución por artículo" en
+ * DATA_MODEL.md.
+ */
+export async function listarArticulosDevueltosDeGuia(guiaId) {
+  const clientes = await listarClientes(guiaId);
+  const articulos = [];
+  clientes.forEach((c) => {
+    (c.comprobantes || []).forEach((comp) => {
+      (comp.items || []).forEach((it) => {
+        const cantidadDevuelta = it.cantidadDevuelta || 0;
+        if (cantidadDevuelta <= 0) return;
+        const precioUnitario = it.cantidad > 0 ? it.neto / it.cantidad : 0;
+        articulos.push({
+          clienteId: c.clienteId,
+          clienteNombre: c.nombre,
+          comprobanteNumero: comp.numero,
+          codigo: it.codigo || "",
+          descripcion: it.descripcion,
+          cantidadDevuelta,
+          monto: Math.round(cantidadDevuelta * precioUnitario * 100) / 100,
+        });
+      });
+    });
+  });
+  return articulos;
+}

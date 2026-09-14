@@ -10,6 +10,7 @@ import {
   cerrarGuia,
   listarChequesDeGuia,
   listarTransferenciasDeGuia,
+  listarArticulosDevueltosDeGuia,
 } from "./data/guias";
 
 export default function App() {
@@ -45,11 +46,13 @@ export default function App() {
         if (existente.estado === "cerrada") {
           const cheques = await listarChequesDeGuia(guiaIdInput);
           const transferencias = await listarTransferenciasDeGuia(guiaIdInput);
+          const articulosDevueltos = await listarArticulosDevueltosDeGuia(guiaIdInput);
           setCierreData({
             totales: existente.totales,
             alertas: existente.alertas || [],
             cheques,
             transferencias,
+            articulosDevueltos,
             clientes: listaClientes,
           });
           setScreen("cierreView");
@@ -98,8 +101,9 @@ export default function App() {
       const { totales, alertas } = await cerrarGuia(guiaId);
       const cheques = await listarChequesDeGuia(guiaId);
       const transferencias = await listarTransferenciasDeGuia(guiaId);
+      const articulosDevueltos = await listarArticulosDevueltosDeGuia(guiaId);
       const clientesFinal = await refreshClientes(guiaId);
-      setCierreData({ totales, alertas, cheques, transferencias, clientes: clientesFinal });
+      setCierreData({ totales, alertas, cheques, transferencias, articulosDevueltos, clientes: clientesFinal });
       setScreen("cierreView");
     } catch (err) {
       setErrorMsg(err.message || "No se pudo cerrar la guía.");
