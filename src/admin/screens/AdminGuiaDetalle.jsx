@@ -1,6 +1,6 @@
 import React from "react";
 import Cierre from "../../screens/Cierre.jsx";
-import { obtenerGuia } from "../../data/guias";
+import { obtenerGuia, eliminarGuia } from "../../data/guias";
 import { calcularResumenGuia } from "../../data/admin";
 
 // Reusa la misma pantalla de rendición que ve el chofer al cerrar la guía — el panel de
@@ -59,5 +59,10 @@ export default function AdminGuiaDetalle({ guiaId, onVolver }) {
     );
   }
 
-  return <Cierre guia={guia} cierreData={cierreData} onVolver={onVolver} />;
+  async function handleEliminarGuia() {
+    await eliminarGuia(guiaId);
+    onVolver();
+  }
+
+  return <Cierre guia={guia} cierreData={cierreData} onVolver={onVolver} onEliminarGuia={handleEliminarGuia} />;
 }

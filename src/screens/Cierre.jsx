@@ -19,8 +19,28 @@ const ESTADO_LABEL = {
   no_entregado: "No entregó",
 };
 
-export default function Cierre({ guia, cierreData, onVolver }) {
+// `onEliminarGuia` es opcional — solo lo pasa AdminGuiaDetalle.jsx. El chofer (App.jsx)
+// nunca lo pasa, así que nunca ve la opción de borrar: borrar una guía es una acción de
+// administración, no algo que el reparto normal necesite.
+export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
   const { showToast, toastNode } = useToast();
+  const [confirmandoBorrado, setConfirmandoBorrado] = React.useState(false);
+  const [borrando, setBorrando] = React.useState(false);
+
+  async function handleEliminar() {
+    if (!confirmandoBorrado) {
+      setConfirmandoBorrado(true);
+      return;
+    }
+    setBorrando(true);
+    try {
+      await onEliminarGuia();
+    } catch (err) {
+      showToast(err.message || "No se pudo borrar la guía.");
+      setBorrando(false);
+      setConfirmandoBorrado(false);
+    }
+  }
   if (!cierreData) {
     return (
       <div className="screen">
@@ -359,6 +379,31 @@ export default function Cierre({ guia, cierreData, onVolver }) {
             ↗ WhatsApp
           </button>
         </div>
+
+        {onEliminarGuia && (
+          <div className="danger-zone">
+            <span className="dp-title">Zona de peligro</span>
+            <div className="export-row">
+              <button
+                className="btn btn-danger"
+                style={{ flex: 1 }}
+                type="button"
+                disabled={borrando}
+                onClick={handleEliminar}
+              >
+                {borrando ? "Borrando…" : confirmandoBorrado ? "¿Seguro? Tocá de nuevo para confirmar" : "🗑 Eliminar esta guía"}
+              </button>
+              {confirmandoBorrado && !borrando && (
+                <button className="btn btn-ghost" type="button" onClick={() => setConfirmandoBorrado(false)}>
+                  Cancelar
+                </button>
+              )}
+            </div>
+            <span className="articulos-note">
+              Borra la guía y todos sus clientes de la base — pensado para limpiar guías de prueba. No se puede deshacer.
+            </span>
+          </div>
+        )}
       </div>
       {toastNode}
     </div>

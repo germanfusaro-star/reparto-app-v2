@@ -286,6 +286,22 @@ export async function listarTransferenciasDeGuia(guiaId) {
 }
 
 /**
+ * Borra una guía completa (el documento de la guía + todos sus clientes) — pensado para
+ * limpiar guías de prueba desde el panel de admin. Es irreversible, por eso la pantalla
+ * que la llama pide confirmación antes (ver Cierre.jsx / AdminGuiaDetalle.jsx). Firestore
+ * no borra subcolecciones en cascada solo, así que hay que borrar cada cliente a mano.
+ */
+export async function eliminarGuia(guiaId) {
+  const clientes = await listarClientes(guiaId);
+  const batch = writeBatch(db);
+  clientes.forEach((c) => {
+    batch.delete(clienteRef(guiaId, c.clienteId));
+  });
+  batch.delete(guiaRef(guiaId));
+  await batch.commit();
+}
+
+/**
  * Todos los artículos devueltos (cantidadDevuelta > 0) de toda la guía, consolidados en
  * una sola lista — para que el chofer pueda controlar la devolución completa al rendir,
  * en vez de tener que entrar cliente por cliente. Ver "Devolución por artículo" en

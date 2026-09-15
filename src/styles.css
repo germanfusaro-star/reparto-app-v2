@@ -184,8 +184,14 @@ h1,h2,h3{
 .btn-primary:hover{ filter:brightness(0.9); }
 .btn-ghost{ background:var(--surface); color:var(--text); border-color:var(--border); }
 .btn-ghost:hover{ background:var(--surface-2); }
+.btn-danger{ background:var(--status-bad-bg); color:var(--status-bad); border-color:var(--status-bad); }
+.btn-danger:hover{ filter:brightness(0.95); }
 .btn-block{ width:100%; }
 .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+
+/* Solo aparece en el panel de admin (Cierre.jsx con onEliminarGuia) — borrar una guía
+   completa, pensado para limpiar guías de prueba antes de pasar a producción. */
+.danger-zone{ border:1px dashed var(--status-bad); border-radius:13px; padding:11px; margin-top:14px; display:flex; flex-direction:column; gap:8px; }
 
 .login-wrap{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:22px; padding:36px 22px; min-height:100vh; }
 .brand-mark{ display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }

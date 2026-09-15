@@ -316,6 +316,16 @@ lista de transferencias del cliente. Un cliente puede tener varias transferencia
 tanda — y también se puede cargar una transferencia a mano sin escanear, con monto y
 referencia libres.
 
+## Borrar una guía (limpieza de guías de prueba)
+
+`eliminarGuia(guiaId)` en `src/data/guias.js` borra el documento de la guía y todos sus
+clientes (Firestore no borra subcolecciones en cascada solo). Se usa desde el panel de
+admin: `AdminGuiaDetalle.jsx` le pasa `onEliminarGuia` a `Cierre.jsx`, que muestra una
+"Zona de peligro" con el botón "🗑 Eliminar esta guía" (confirmación en dos toques, sin
+usar el `confirm()` del navegador). El chofer (`App.jsx`) nunca pasa ese prop, así que
+nunca ve la opción — borrar una guía es una acción de administración. Pensado para poder
+limpiar las guías usadas mientras se prueba la V2, sin tener que tocar Firestore a mano.
+
 ## Detalle de cobranza por cheques y por transferencias
 
 Cuando el chofer carga un cheque, la app pide número de cheque, banco y fecha además del
