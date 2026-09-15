@@ -25,6 +25,37 @@ todos). El campo sigue llamándose `neto`/`item_neto` en el código por no rompe
 ya lo usa, pero el valor que trae es el final con IVA incluido. El mismo fix se aplicó en
 la V1 de producción (`reparto-app/api/guia.js`), porque tenía el mismo problema.
 
+**Importante — algunos comprobantes llevan además una "Percepción de IVA a terceros" que
+no está en `bq_ventas` (solo V2, no aplicado todavía en V1).** Detectado con Germán el
+2026-09-15 comparando otra vez contra el ERP: a ciertos clientes (según su condición
+fiscal) Sigma2k les suma al total de la factura una percepción de IVA aparte del IVA
+discriminado por artículo. Ese monto no existe en ninguna de las ~140 columnas de
+`bq_ventas` — vive en la tabla contable `sigma-star-2.sigmarepo.bq_contable`, como un
+asiento aparte (cuenta `21418` "PERCEP IVA A TERCEROS") dentro del mismo movimiento
+contable de la factura (junto a la cuenta `41101` "VENTA DE MERCADERIAS" y la `21421`
+"IVA DEBITO FISCAL").
+
+`api/guia.js` la trae con una segunda consulta (`PERCEPCION_QUERY`) después de armar el
+manifiesto: agrupa `bq_contable` por movimiento (`ID`) — **sin filtrar ni agrupar por
+`SUBCUENTA`**, porque ese campo (que sería el `CLIENTE_ID`) solo viene cargado en la línea
+"DEUDORES POR VENTAS" de cada movimiento; en las demás líneas (mercadería, IVA,
+percepción) `SUBCUENTA` viene en `0`. Agrupando por `ID` primero y sacando recién ahí el
+cliente con `MAX(SUBCUENTA)`, cada movimiento con percepción queda identificado por
+`fecha + cliente_id + monto de mercadería sin IVA` — esa combinación tiene que coincidir
+centavo a centavo con `fecha + cliente_id + SUM(ITEM_NETO)` del comprobante en `bq_ventas`
+(no hay un campo de número de comprobante en `bq_contable` para unir directo). Cuando
+coincide, la percepción se suma al `monto` de ese comprobante y al `monto_total` del
+cliente — no aparece como un artículo más, porque no es mercadería.
+
+Confirmado con el comprobante 00178649 de la guía 4290 (López Branco Valentín): mercadería
+$184.343,52 + IVA $36.295,08 + percepción $5.185,01 = $225.823,61, igual que en Sigma2k.
+Solo afecta a una parte de los comprobantes (~15% en los últimos 30 días, ~$9,6M
+acumulados) — el resto de los clientes no tiene percepción y la consulta simplemente no
+les devuelve movimiento. **Limitación conocida:** si un comprobante con percepción se
+marca con entrega **parcial**, el descuento por artículo no reduce la percepción de forma
+proporcional (queda completa en el saldo a cobrar) — solo se descuenta del todo cuando el
+comprobante queda **no entregado**. Por ahora no se pidió resolver ese caso puntual.
+
 ```json
 {
   "guia_id": 4277,
