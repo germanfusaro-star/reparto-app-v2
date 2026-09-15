@@ -309,6 +309,14 @@ uso real):
 Estas alertas se calculan al cerrar la guía y quedan guardadas en `guias/{guiaId}.alertas`
 para mostrarlas en el panel de administración y en el export.
 
+**Umbral de $1 para no alertar por centavos de redondeo.** Detectado con Germán el
+2026-09-15: sumar varias líneas de artículo (o la percepción de IVA — ver "Origen:
+BigQuery") puede dejar un resto de unos pocos centavos que no es una cuenta corriente
+real, y esas alertas de $0,12 o $0,37 solo generan ruido. `calcularTotalesYAlertas()` en
+`src/data/guias.js` solo dispara las dos alertas de arriba cuando el monto en cuestión
+(`montoCtaCte` o `montoCobrado`) es `>= $1` — por debajo de eso no alerta, aunque el monto
+siga sumado correctamente en los totales.
+
 ## Aviso de fin de reparto
 
 En la lista de clientes, arriba del botón "Cerrar guía y ver rendición", hay un botón

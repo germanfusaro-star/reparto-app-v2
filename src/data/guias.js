@@ -228,7 +228,12 @@ export function calcularTotalesYAlertas(clientes) {
 
     if (c.estado === "pendiente") return; // no visitado: no genera alerta, sí queda fuera de los totales cobrados
     const esperaContado = esperaCobroInmediato(c.condicionPredeterminada);
-    if (esperaContado && c.montoCtaCte > 0) {
+    // Umbral para no alertar por centavos de diferencia de redondeo (p.ej. sumar varias
+    // líneas de artículo, o la percepción de IVA, puede dejar un resto de unos pocos
+    // centavos que no es una cuenta corriente real) — solo alerta si queda $1 o más sin
+    // cobrar / cobrado de más.
+    const UMBRAL_ALERTA = 1;
+    if (esperaContado && c.montoCtaCte >= UMBRAL_ALERTA) {
       alertas.push({
         tipo: "warn",
         clienteId: c.clienteId,
@@ -236,7 +241,7 @@ export function calcularTotalesYAlertas(clientes) {
         motivo: "Quedó en cuenta corriente siendo contado",
         detalle: `$${c.montoCtaCte.toLocaleString("es-AR")} sin cobrar.`,
       });
-    } else if (!esperaContado && c.montoCobrado > 0) {
+    } else if (!esperaContado && c.montoCobrado >= UMBRAL_ALERTA) {
       alertas.push({
         tipo: "info",
         clienteId: c.clienteId,
