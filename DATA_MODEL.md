@@ -403,3 +403,9 @@ puede cotejar de un vistazo el total de cada artículo contra la mercadería fí
 de vuelta en el camión, en vez de tener que sumar a mano varias filas del mismo producto
 repartidas entre distintos clientes. Si más de un cliente devolvió el mismo artículo, el
 renglón consolidado aclara "· N clientes".
+
+Debajo de ese consolidado, el mismo panel de "Devuelto" agrega una segunda lista **"Por
+cliente"**: todos los clientes con `estado === "parcial"` o `"no_entregado"`, con su
+`montoDevuelto` — para poder ver, aparte del total por artículo, a qué cliente corresponde
+cada devolución sin tener que entrar guía adentro cliente por cliente. Las dos listas
+conviven en el mismo panel (primero artículos consolidados, después clientes).

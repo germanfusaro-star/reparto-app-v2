@@ -68,6 +68,11 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
     setAbierto((a) => (a === key ? null : key));
   }
   const clientesCtaCte = clientes.filter((c) => (c.montoCtaCte || 0) > 0);
+  // Además del consolidado por artículo, el panel de "Devuelto" muestra por quién quedó
+  // la devolución — parcial o no entregado — con el importe devuelto de cada uno, para
+  // poder controlar contra qué cliente corresponde cada devolución sin tener que abrir la
+  // guía cliente por cliente.
+  const clientesConDevolucion = clientes.filter((c) => c.estado === "parcial" || c.estado === "no_entregado");
 
   // El chofer necesita controlar el TOTAL físico devuelto por artículo (para cotejarlo
   // contra la mercadería que trae de vuelta en el camión), no una fila por cada cliente
@@ -284,6 +289,23 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
                     </span>
                   </div>
                   <span className="cr-amt">{fmt(a.monto)}</span>
+                </div>
+              ))
+            )}
+
+            <span className="dp-title" style={{ marginTop: 10 }}>
+              Por cliente ({clientesConDevolucion.length})
+            </span>
+            {clientesConDevolucion.length === 0 ? (
+              <span className="articulos-note">Ningún cliente quedó con devolución en esta guía.</span>
+            ) : (
+              clientesConDevolucion.map((c) => (
+                <div className="cheque-report-row" key={c.clienteId}>
+                  <div className="cr-main">
+                    <span className="cr-name">{c.nombre}</span>
+                    <span className="cr-sub">{c.estado === "no_entregado" ? "No entregó" : "Entrega parcial"}</span>
+                  </div>
+                  <span className="cr-amt">{fmt(c.montoDevuelto)}</span>
                 </div>
               ))
             )}
