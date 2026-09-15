@@ -334,6 +334,7 @@ export default function DetalleCliente({ guiaId, cliente, onVolver }) {
                         <div className="ar-main">
                           <span className="ar-desc">{it.descripcion}</span>
                           <span className="ar-sub">
+                            {it.codigo && <>Cód. {it.codigo} · </>}
                             Pedido: {it.cantidad} · N° {c.numero}
                             {marcado && (
                               <>

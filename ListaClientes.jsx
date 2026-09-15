@@ -11,7 +11,7 @@ const ESTADO_META = {
   no_entregado: { label: "No entregó", cls: "no_entregado" },
 };
 
-export default function ListaClientes({ guia, clientes, choferNombre, onAbrirCliente, onCerrarGuia, loading }) {
+export default function ListaClientes({ guia, clientes, choferNombre, onAbrirCliente, onCerrarGuia, onNuevaGuia, loading }) {
   const total = guia.totalGuia || clientes.reduce((a, c) => a + (c.montoTotal || 0), 0);
   const visitados = clientes.filter((c) => c.estado !== "pendiente").length;
   const pct = clientes.length ? Math.round((visitados / clientes.length) * 100) : 0;
@@ -46,6 +46,14 @@ export default function ListaClientes({ guia, clientes, choferNombre, onAbrirCli
           <h2>Reparto de hoy</h2>
           <span className="sub">{choferNombre}</span>
         </div>
+        <button
+          className="btn btn-ghost"
+          type="button"
+          style={{ marginLeft: "auto", flex: "none" }}
+          onClick={onNuevaGuia}
+        >
+          Cambiar de guía
+        </button>
       </div>
       <div className="scroll">
         <div className="summary-card">

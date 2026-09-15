@@ -48,10 +48,17 @@ const QUERY = `
     COMPROBANTE_NUMERO AS comprobante_numero,
     COMPROBANTE_TIPO AS comprobante_tipo,
     CONDICION_DE_VENTA AS condicion_venta,
+    TRIM(ITEM_ARTICULO) AS item_codigo,
     ITEM_DESCRIPCION AS item_descripcion,
     ITEM_CANTIDAD AS item_cantidad,
     ITEM_PRECIO_UNITARIO AS item_precio_unitario,
-    ROUND(ITEM_NETO, 2) AS item_neto
+    -- ITEM_NETO es el subtotal SIN IVA — el monto real de la factura (lo que el chofer
+    -- tiene que cobrar, y lo que hay que descontar si vuelve un artículo) es ITEM_FINAL
+    -- (neto + IVA + impuestos internos). Detectado con Germán el 2026-09-14: usar
+    -- ITEM_NETO hacía que el total y el descuento por artículo quedaran ~20% de menos en
+    -- cualquier comprobante con IVA discriminado. El campo se sigue llamando item_neto
+    -- por compatibilidad con el resto del código, pero ahora trae el monto con IVA incluido.
+    ROUND(ITEM_FINAL, 2) AS item_neto
   FROM \`sigma-star-2.sigmarepo.bq_ventas\`
   WHERE GUIA_ID = @guiaId
     AND COMPROBANTE_TIPO NOT IN ('NC', 'ND')
@@ -119,6 +126,7 @@ module.exports = async (req, res) => {
       const itemNeto = row.item_neto || 0;
       const itemCantidad = row.item_cantidad || 0;
       comprobante.items.push({
+        codigo: row.item_codigo || "",
         descripcion: row.item_descripcion,
         cantidad: itemCantidad,
         precio_unitario: row.item_precio_unitario || 0,

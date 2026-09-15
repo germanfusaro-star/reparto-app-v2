@@ -147,6 +147,28 @@ export default function AdminDashboard({ onAbrirGuia, onAbrirChoferes }) {
               </div>
             </div>
 
+            {resumen.avisosModificados.length > 0 && (
+              <>
+                <div className="list-title">
+                  <h3>⚠️ Avisaron pero modificaron algo después</h3>
+                  <span>{resumen.avisosModificados.length}</span>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 4 }}>
+                  {resumen.avisosModificados.map((f) => (
+                    <div className="alert-card clickable-row" key={f.guiaId} onClick={() => onAbrirGuia(f.guiaId)}>
+                      <span className="ic">⚠️</span>
+                      <span>
+                        <b>
+                          {f.choferNombre} — Guía #{f.guiaId}
+                        </b>
+                        <span>{f.repartoNombre} · avisó que terminó y después cargó o corrigió algo — revisar antes de cerrar</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
             {resumen.avisos.length > 0 && (
               <>
                 <div className="list-title">
@@ -202,11 +224,18 @@ export default function AdminDashboard({ onAbrirGuia, onAbrirChoferes }) {
                       <td>{f.repartoNombre}</td>
                       <td>
                         <span className={`estado-badge ${f.estado}`}>{ESTADO_LABEL[f.estado] || f.estado}</span>
-                        {f.avisoFinReparto && (
-                          <span title={f.estado === "abierta" ? "Avisó que terminó" : "Avisó que terminó antes de cerrar la guía"}>
+                        {f.modificadoLuegoDeAviso ? (
+                          <span title="Avisó que terminó y después cargó o corrigió algo, sin volver a avisar">
                             {" "}
-                            📣
+                            ⚠️
                           </span>
+                        ) : (
+                          f.avisoFinReparto && (
+                            <span title={f.estado === "abierta" ? "Avisó que terminó" : "Avisó que terminó antes de cerrar la guía"}>
+                              {" "}
+                              📣
+                            </span>
+                          )
                         )}
                       </td>
                       <td className="num">{fmt(f.totalGuia)}</td>

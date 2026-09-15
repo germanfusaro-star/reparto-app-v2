@@ -302,6 +302,49 @@ no queda nada pendiente. Igual queda un ícono 📣 al lado del estado en la tab
 abajo, para cualquier guía que haya tenido el aviso prendido, esté abierta o cerrada — así
 queda un registro visual de que el chofer avisó, aunque ya se haya cerrado la guía.
 
+### Llave del fin de reparto (aviso al admin si hubo cambios después)
+
+El botón de aviso funciona como una "llave": si el chofer ya tocó "Avisar que terminé el
+reparto" y **después** carga o corrige una entrega, no alcanza con destildar el aviso en
+silencio — administración tiene que enterarse explícitamente de que hubo cambios luego de
+esa señal, porque puede significar que el chofer se dio cuenta de un error después de haber
+dicho que ya estaba todo listo.
+
+- `crearGuiaDesdeManifiesto()` arranca la guía con `modificadoLuegoDeAviso: false` y
+  `modificadoLuegoDeAvisoEn: null`.
+- `guardarEntregaCliente()` lee el estado actual de la guía antes de escribir; si
+  `avisoFinReparto` ya estaba en `true`, además de destildarlo (como antes) prende
+  `modificadoLuegoDeAviso: true` y guarda la hora en `modificadoLuegoDeAvisoEn`.
+- `avisarFinReparto()` — cuando el chofer vuelve a avisar (ya sea la primera vez o
+  reconfirmando después de un cambio) — apaga `modificadoLuegoDeAviso` de nuevo, porque esa
+  nueva confirmación reemplaza a la anterior.
+- El panel de admin (`AdminDashboard.jsx`) muestra una sección propia
+  "⚠️ Avisaron pero modificaron algo después" con las guías abiertas en ese estado (aparece
+  arriba de "📣 Avisaron que terminaron"), y en la tabla "Guías" el ícono de la fila pasa de
+  📣 a ⚠️ mientras el flag esté prendido. `Cierre.jsx` (que reusan tanto la rendición del
+  chofer como el detalle de guía del admin) también muestra un cartel de alerta arriba de
+  todo si `guia.modificadoLuegoDeAviso` es `true`, para que no pase desapercibido ni
+  siquiera abriendo la guía puntual. El flag no se borra solo al cerrar la guía — queda
+  como registro de que hubo un cambio de último momento, aunque ya se haya rendido.
+
+## Sesión activa en el celular (retomar guía sin volver a tipear)
+
+Para que el chofer no tenga que volver a escribir el número de guía cada vez que sale de
+la app y vuelve a entrar a mitad de reparto (el celular la mata en segundo plano, por
+ejemplo), `src/lib/sesion.js` guarda `{ chofer, guiaId }` en `localStorage` de ese celular
+apenas arranca o retoma una guía que **no** está cerrada. Al abrir la app, `App.jsx` lee esa
+sesión en un `useEffect` de montaje y llama a `handleIniciar()` solo, sin que el chofer
+tenga que tocar nada — si todo sale bien, entra directo a la lista de clientes (o a la
+rendición, si la guía ya estaba cerrada) en vez de mostrar el login.
+
+La sesión se borra sola cuando ya no queda reparto activo que retomar: al cerrar la guía
+(`handleCerrar()`) y al confirmar una guía que resulta estar cerrada al reabrir la app. El
+chofer también puede soltarla a mano con el botón **"Cambiar de guía"** en la barra de
+arriba de la lista de clientes (`onNuevaGuia` en `App.jsx`) — por ejemplo si tipeó mal el
+número, o si terminó y quiere arrancar otra guía sin pasar por el cierre de la anterior.
+Es solo una conveniencia local del celular: no toca nada en Firestore, así que si falla
+(modo privado, cuota llena) el chofer simplemente vuelve a tipear la guía como antes.
+
 ## Escaneo del comprobante de transferencia
 
 Al tocar "Transferencia" el chofer puede escanear el comprobante con la cámara del celular,

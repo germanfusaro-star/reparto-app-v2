@@ -4,7 +4,13 @@
 
 import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebase";
-import { listarClientes, listarChequesDeGuia, listarTransferenciasDeGuia, calcularTotalesYAlertas } from "./guias";
+import {
+  listarClientes,
+  listarChequesDeGuia,
+  listarTransferenciasDeGuia,
+  listarArticulosDevueltosDeGuia,
+  calcularTotalesYAlertas,
+} from "./guias";
 import { describirMotivoDevolucion } from "../lib/motivosDevolucion";
 
 const MAX_GUIAS = 300; // suficiente para meses de reparto diario; evita traer la colección entera
@@ -25,8 +31,9 @@ export async function calcularResumenGuia(guiaId) {
   const clientes = await listarClientes(guiaId);
   const cheques = await listarChequesDeGuia(guiaId);
   const transferencias = await listarTransferenciasDeGuia(guiaId);
+  const articulosDevueltos = await listarArticulosDevueltosDeGuia(guiaId);
   const { alertas, ...totales } = calcularTotalesYAlertas(clientes);
-  return { totales, alertas, cheques, transferencias, clientes };
+  return { totales, alertas, cheques, transferencias, articulosDevueltos, clientes };
 }
 
 function dentroDeRango(fecha, desde, hasta) {
@@ -78,6 +85,7 @@ export async function calcularResumenGlobal(filtro = {}) {
       totalCtaCte: resumen.totales.totalCtaCte,
       cantidadAlertas: resumen.alertas.length,
       avisoFinReparto: !!guia.avisoFinReparto,
+      modificadoLuegoDeAviso: !!guia.modificadoLuegoDeAviso,
     });
 
     // Incidencias: no solo las alertas de "cobrado vs. condición nominal" (ya calculadas
@@ -117,6 +125,10 @@ export async function calcularResumenGlobal(filtro = {}) {
   // Choferes que avisaron que terminaron de repartir pero todavía no cerraron/rindieron
   // la guía — para que el panel de admin lo vea sin depender de un mensaje aparte.
   const avisos = filasOrdenadas.filter((f) => f.avisoFinReparto && f.estado === "abierta");
+  // Guías donde el chofer avisó que terminó y DESPUÉS cargó o corrigió algo, sin volver a
+  // avisar — la "llave" del fin de reparto (ver DATA_MODEL.md). Todavía abiertas: hay que
+  // revisarlas antes de que se cierren/rindan.
+  const avisosModificados = filasOrdenadas.filter((f) => f.modificadoLuegoDeAviso && f.estado === "abierta");
   return {
     kpis: {
       cantidadGuias: guiasEnRango.length,
@@ -130,5 +142,6 @@ export async function calcularResumenGlobal(filtro = {}) {
     filas: filasOrdenadas,
     incidencias,
     avisos,
+    avisosModificados,
   };
 }

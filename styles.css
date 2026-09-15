@@ -184,8 +184,14 @@ h1,h2,h3{
 .btn-primary:hover{ filter:brightness(0.9); }
 .btn-ghost{ background:var(--surface); color:var(--text); border-color:var(--border); }
 .btn-ghost:hover{ background:var(--surface-2); }
+.btn-danger{ background:var(--status-bad-bg); color:var(--status-bad); border-color:var(--status-bad); }
+.btn-danger:hover{ filter:brightness(0.95); }
 .btn-block{ width:100%; }
 .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+
+/* Solo aparece en el panel de admin (Cierre.jsx con onEliminarGuia) — borrar una guía
+   completa, pensado para limpiar guías de prueba antes de pasar a producción. */
+.danger-zone{ border:1px dashed var(--status-bad); border-radius:13px; padding:11px; margin-top:14px; display:flex; flex-direction:column; gap:8px; }
 
 .login-wrap{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:22px; padding:36px 22px; min-height:100vh; }
 .brand-mark{ display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center; }
@@ -398,6 +404,15 @@ h1,h2,h3{
 .tot-tile.neto{ grid-column:1/-1; background:linear-gradient(155deg, var(--brand-brown), var(--accent-strong)); border:none; }
 .tot-tile.neto .lbl{ color:#f0e8db; }
 .tot-tile.neto .val{ color:#fff; font-size:1.9rem; }
+/* Pastillas con detalle: Devuelto / Cta. corriente / Transferencias / Cheques se pueden
+   tocar para ver el detalle consolidado de la guía — se marcan clickeables y con un
+   indicador de que abren algo, y quedan resaltadas mientras su detalle está abierto. */
+.tot-tile.clickable{ cursor:pointer; text-align:left; font:inherit; position:relative; }
+.tot-tile.clickable .lbl::after{ content:" ▾"; opacity:.55; }
+.tot-tile.clickable.open{ border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--surface)); }
+.tot-tile.clickable.open .lbl::after{ content:" ▴"; opacity:.8; }
+.detalle-panel{ background:var(--surface); border:1px solid var(--border); border-radius:13px; padding:11px; margin-top:8px; display:flex; flex-direction:column; gap:8px; }
+.detalle-panel .dp-title{ font-size:.76rem; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
 
 .alert-card{
   display:flex; gap:9px; padding:10px 11px; border-radius:12px;

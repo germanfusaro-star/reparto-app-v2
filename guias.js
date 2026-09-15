@@ -49,6 +49,12 @@ export async function crearGuiaDesdeManifiesto(manifiesto, choferNombre) {
     alertas: [],
     avisoFinReparto: false,
     avisoFinRepartoEn: null,
+    // "Llave" del fin de reparto: si el chofer ya avisó que terminó y después toca algo
+    // más (carga o corrige una entrega), queda marcado acá para que administración lo
+    // vea explícitamente — no alcanza con que el aviso se destilde solo (ver
+    // guardarEntregaCliente y avisarFinReparto más abajo).
+    modificadoLuegoDeAviso: false,
+    modificadoLuegoDeAvisoEn: null,
   });
 
   manifiesto.clientes.forEach((cliente) => {
@@ -97,6 +103,11 @@ export async function avisarFinReparto(guiaId) {
   await updateDoc(guiaRef(guiaId), {
     avisoFinReparto: true,
     avisoFinRepartoEn: serverTimestamp(),
+    // El chofer está (re)confirmando que esto ya es lo definitivo — limpia cualquier
+    // aviso previo de "modificó algo después de avisar", porque ese aviso viejo ya no
+    // aplica a este estado.
+    modificadoLuegoDeAviso: false,
+    modificadoLuegoDeAvisoEn: null,
   });
 }
 
@@ -154,6 +165,12 @@ export async function guardarEntregaCliente(guiaId, clienteId, cliente, datos) {
 
   const motivoDevolucion = datos.estado === "completo" ? "" : (datos.motivoDevolucion || "").trim();
 
+  // Antes de escribir, miramos si el chofer ya había avisado "terminé el reparto" — si
+  // es así, esta carga/corrección es una modificación DESPUÉS de esa señal, y hay que
+  // dejarlo marcado para administración (ver DATA_MODEL.md, "Llave del fin de reparto").
+  const guiaSnap = await getDoc(guiaRef(guiaId));
+  const yaHabiaAvisado = !!guiaSnap.data()?.avisoFinReparto;
+
   const batch = writeBatch(db);
   batch.update(clienteRef(guiaId, clienteId), {
     estado: datos.estado,
@@ -170,10 +187,15 @@ export async function guardarEntregaCliente(guiaId, clienteId, cliente, datos) {
   });
   // Si el chofer ya había avisado que terminó el reparto y ahora carga o corrige una
   // entrega, el aviso deja de ser válido hasta que lo confirme de nuevo — evita que quede
-  // prendido "avisé que terminé" mientras todavía sigue tocando entregas.
+  // prendido "avisé que terminé" mientras todavía sigue tocando entregas. Además, si ese
+  // era el caso, dejamos prendida la "llave" para que el panel de admin sepa que hubo
+  // cambios después del aviso, aunque el chofer nunca lo cuente por su cuenta.
   batch.update(guiaRef(guiaId), {
     avisoFinReparto: false,
     avisoFinRepartoEn: null,
+    ...(yaHabiaAvisado
+      ? { modificadoLuegoDeAviso: true, modificadoLuegoDeAvisoEn: serverTimestamp() }
+      : {}),
   });
   await batch.commit();
 }
@@ -283,4 +305,50 @@ export async function listarTransferenciasDeGuia(guiaId) {
     });
   });
   return transferencias;
+}
+
+/**
+ * Borra una guía completa (el documento de la guía + todos sus clientes) — pensado para
+ * limpiar guías de prueba desde el panel de admin. Es irreversible, por eso la pantalla
+ * que la llama pide confirmación antes (ver Cierre.jsx / AdminGuiaDetalle.jsx). Firestore
+ * no borra subcolecciones en cascada solo, así que hay que borrar cada cliente a mano.
+ */
+export async function eliminarGuia(guiaId) {
+  const clientes = await listarClientes(guiaId);
+  const batch = writeBatch(db);
+  clientes.forEach((c) => {
+    batch.delete(clienteRef(guiaId, c.clienteId));
+  });
+  batch.delete(guiaRef(guiaId));
+  await batch.commit();
+}
+
+/**
+ * Todos los artículos devueltos (cantidadDevuelta > 0) de toda la guía, consolidados en
+ * una sola lista — para que el chofer pueda controlar la devolución completa al rendir,
+ * en vez de tener que entrar cliente por cliente. Ver "Devolución por artículo" en
+ * DATA_MODEL.md.
+ */
+export async function listarArticulosDevueltosDeGuia(guiaId) {
+  const clientes = await listarClientes(guiaId);
+  const articulos = [];
+  clientes.forEach((c) => {
+    (c.comprobantes || []).forEach((comp) => {
+      (comp.items || []).forEach((it) => {
+        const cantidadDevuelta = it.cantidadDevuelta || 0;
+        if (cantidadDevuelta <= 0) return;
+        const precioUnitario = it.cantidad > 0 ? it.neto / it.cantidad : 0;
+        articulos.push({
+          clienteId: c.clienteId,
+          clienteNombre: c.nombre,
+          comprobanteNumero: comp.numero,
+          codigo: it.codigo || "",
+          descripcion: it.descripcion,
+          cantidadDevuelta,
+          monto: Math.round(cantidadDevuelta * precioUnitario * 100) / 100,
+        });
+      });
+    });
+  });
+  return articulos;
 }

@@ -19,8 +19,28 @@ const ESTADO_LABEL = {
   no_entregado: "No entregó",
 };
 
-export default function Cierre({ guia, cierreData, onVolver }) {
+// `onEliminarGuia` es opcional — solo lo pasa AdminGuiaDetalle.jsx. El chofer (App.jsx)
+// nunca lo pasa, así que nunca ve la opción de borrar: borrar una guía es una acción de
+// administración, no algo que el reparto normal necesite.
+export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
   const { showToast, toastNode } = useToast();
+  const [confirmandoBorrado, setConfirmandoBorrado] = React.useState(false);
+  const [borrando, setBorrando] = React.useState(false);
+
+  async function handleEliminar() {
+    if (!confirmandoBorrado) {
+      setConfirmandoBorrado(true);
+      return;
+    }
+    setBorrando(true);
+    try {
+      await onEliminarGuia();
+    } catch (err) {
+      showToast(err.message || "No se pudo borrar la guía.");
+      setBorrando(false);
+      setConfirmandoBorrado(false);
+    }
+  }
   if (!cierreData) {
     return (
       <div className="screen">
@@ -39,7 +59,15 @@ export default function Cierre({ guia, cierreData, onVolver }) {
     );
   }
 
-  const { totales, alertas = [], cheques = [], transferencias = [], clientes = [] } = cierreData;
+  const { totales, alertas = [], cheques = [], transferencias = [], articulosDevueltos = [], clientes = [] } = cierreData;
+  // Las pastillas de Devuelto / Cta. corriente / Transferencias / Cheques abren su detalle
+  // consolidado de la guía al tocarlas, para que el chofer pueda controlarlo antes de
+  // rendir — en vez de mostrar todo siempre, solo se ve el detalle de la que se tocó.
+  const [abierto, setAbierto] = React.useState(null); // 'devuelto' | 'ctacte' | 'transferencia' | 'cheque' | null
+  function toggleDetalle(key) {
+    setAbierto((a) => (a === key ? null : key));
+  }
+  const clientesCtaCte = clientes.filter((c) => (c.montoCtaCte || 0) > 0);
 
   function descargarCsv() {
     const lines = [];
@@ -93,6 +121,25 @@ export default function Cierre({ guia, cierreData, onVolver }) {
     } else {
       transferencias.forEach((t) => {
         lines.push([csvEscape(t.clienteNombre), csvEscape(t.referencia || "s/d"), montoCsv(t.monto)].join(";"));
+      });
+    }
+    lines.push("");
+    lines.push(["Detalle de artículos devueltos"].join(";"));
+    lines.push(["Cliente", "Código", "Descripción", "Cantidad", "N° comprobante", "Monto"].join(";"));
+    if (articulosDevueltos.length === 0) {
+      lines.push("Sin artículos devueltos en esta guía");
+    } else {
+      articulosDevueltos.forEach((a) => {
+        lines.push(
+          [
+            csvEscape(a.clienteNombre),
+            csvEscape(a.codigo || "s/d"),
+            csvEscape(a.descripcion),
+            montoCsv(a.cantidadDevuelta),
+            csvEscape(a.comprobanteNumero),
+            montoCsv(a.monto),
+          ].join(";")
+        );
       });
     }
     lines.push("");
@@ -151,36 +198,127 @@ export default function Cierre({ guia, cierreData, onVolver }) {
       </div>
 
       <div className="scroll">
+        {guia?.modificadoLuegoDeAviso && (
+          <div className="alert-card">
+            <span className="ic">⚠️</span>
+            <span>
+              <b>Se avisó que terminó el reparto y después se modificó algo</b>
+              <span>Revisar los cambios antes de dar la rendición por buena.</span>
+            </span>
+          </div>
+        )}
+
         <div className="totales-grid">
           <div className="tot-tile">
             <span className="lbl">Total guía</span>
             <span className="val">{fmt(totales.totalGuia)}</span>
           </div>
-          <div className="tot-tile">
+          <button type="button" className={`tot-tile clickable${abierto === "devuelto" ? " open" : ""}`} onClick={() => toggleDetalle("devuelto")}>
             <span className="lbl">Devuelto</span>
             <span className="val">{fmt(totales.totalDevuelto)}</span>
-          </div>
-          <div className="tot-tile">
+          </button>
+          <button type="button" className={`tot-tile clickable${abierto === "ctacte" ? " open" : ""}`} onClick={() => toggleDetalle("ctacte")}>
             <span className="lbl">Cta. corriente</span>
             <span className="val">{fmt(totales.totalCtaCte)}</span>
-          </div>
-          <div className="tot-tile">
+          </button>
+          <button type="button" className={`tot-tile clickable${abierto === "transferencia" ? " open" : ""}`} onClick={() => toggleDetalle("transferencia")}>
             <span className="lbl">Transferencias</span>
             <span className="val">{fmt(totales.totalTransferencia)}</span>
-          </div>
+          </button>
           <div className="tot-tile">
             <span className="lbl">Efectivo</span>
             <span className="val">{fmt(totales.totalEfectivo)}</span>
           </div>
-          <div className="tot-tile">
+          <button type="button" className={`tot-tile clickable${abierto === "cheque" ? " open" : ""}`} onClick={() => toggleDetalle("cheque")}>
             <span className="lbl">Cheques</span>
             <span className="val">{fmt(totales.totalCheque)}</span>
-          </div>
+          </button>
           <div className="tot-tile neto">
             <span className="lbl">Neto a rendir (efectivo + cheque)</span>
             <span className="val">{fmt(totales.netoARendir)}</span>
           </div>
         </div>
+
+        {abierto === "devuelto" && (
+          <div className="detalle-panel">
+            <span className="dp-title">Artículos devueltos ({articulosDevueltos.length})</span>
+            {articulosDevueltos.length === 0 ? (
+              <span className="articulos-note">No se marcó ningún artículo devuelto en esta guía.</span>
+            ) : (
+              articulosDevueltos.map((a, i) => (
+                <div className="cheque-report-row" key={i}>
+                  <div className="cr-main">
+                    <span className="cr-name">{a.clienteNombre}</span>
+                    <span className="cr-sub">
+                      {a.codigo && <>Cód. {a.codigo} · </>}
+                      {a.descripcion} · {a.cantidadDevuelta} un. · N° {a.comprobanteNumero}
+                    </span>
+                  </div>
+                  <span className="cr-amt">{fmt(a.monto)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {abierto === "ctacte" && (
+          <div className="detalle-panel">
+            <span className="dp-title">Clientes en cuenta corriente ({clientesCtaCte.length})</span>
+            {clientesCtaCte.length === 0 ? (
+              <span className="articulos-note">No quedó ningún cliente en cuenta corriente en esta guía.</span>
+            ) : (
+              clientesCtaCte.map((c) => (
+                <div className="cheque-report-row" key={c.clienteId}>
+                  <div className="cr-main">
+                    <span className="cr-name">{c.nombre}</span>
+                    <span className="cr-sub">{describirCondicion(c.condicionPredeterminada)}</span>
+                  </div>
+                  <span className="cr-amt">{fmt(c.montoCtaCte)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {abierto === "transferencia" && (
+          <div className="detalle-panel">
+            <span className="dp-title">Detalle de transferencias ({transferencias.length})</span>
+            {transferencias.length === 0 ? (
+              <span className="articulos-note">No se cargaron transferencias en esta guía.</span>
+            ) : (
+              transferencias.map((t, i) => (
+                <div className="cheque-report-row" key={i}>
+                  <div className="cr-main">
+                    <span className="cr-name">{t.clienteNombre}</span>
+                    <span className="cr-sub">{t.referencia || "Sin referencia"}</span>
+                  </div>
+                  <span className="cr-amt">{fmt(t.monto)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {abierto === "cheque" && (
+          <div className="detalle-panel">
+            <span className="dp-title">Detalle de cobranza por cheques ({cheques.length})</span>
+            {cheques.length === 0 ? (
+              <span className="articulos-note">No se cargaron cheques en esta guía.</span>
+            ) : (
+              cheques.map((ch, i) => (
+                <div className="cheque-report-row" key={i}>
+                  <div className="cr-main">
+                    <span className="cr-name">{ch.clienteNombre}</span>
+                    <span className="cr-sub">
+                      N° {ch.numero || "s/n"} · {ch.banco || "Banco s/d"} · {ch.fecha || "s/f"}
+                    </span>
+                  </div>
+                  <span className="cr-amt">{fmt(ch.monto)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
 
         <div className="list-title">
           <h3>Alertas</h3>
@@ -205,60 +343,6 @@ export default function Cierre({ guia, cierreData, onVolver }) {
                   </b>
                   <span>{a.detalle}</span>
                 </span>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="list-title">
-          <h3>Detalle de cobranza por cheques</h3>
-          <span>{cheques.length}</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {cheques.length === 0 ? (
-            <div className="alert-card info">
-              <span className="ic">—</span>
-              <span>
-                <b>Sin cheques</b>
-                <span>No se cargaron cheques en esta guía.</span>
-              </span>
-            </div>
-          ) : (
-            cheques.map((ch, i) => (
-              <div className="cheque-report-row" key={i}>
-                <div className="cr-main">
-                  <span className="cr-name">{ch.clienteNombre}</span>
-                  <span className="cr-sub">
-                    N° {ch.numero || "s/n"} · {ch.banco || "Banco s/d"} · {ch.fecha || "s/f"}
-                  </span>
-                </div>
-                <span className="cr-amt">{fmt(ch.monto)}</span>
-              </div>
-            ))
-          )}
-        </div>
-
-        <div className="list-title">
-          <h3>Detalle de transferencias</h3>
-          <span>{transferencias.length}</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {transferencias.length === 0 ? (
-            <div className="alert-card info">
-              <span className="ic">—</span>
-              <span>
-                <b>Sin transferencias</b>
-                <span>No se cargaron transferencias en esta guía.</span>
-              </span>
-            </div>
-          ) : (
-            transferencias.map((t, i) => (
-              <div className="cheque-report-row" key={i}>
-                <div className="cr-main">
-                  <span className="cr-name">{t.clienteNombre}</span>
-                  <span className="cr-sub">{t.referencia || "Sin referencia"}</span>
-                </div>
-                <span className="cr-amt">{fmt(t.monto)}</span>
               </div>
             ))
           )}
@@ -305,6 +389,31 @@ export default function Cierre({ guia, cierreData, onVolver }) {
             ↗ WhatsApp
           </button>
         </div>
+
+        {onEliminarGuia && (
+          <div className="danger-zone">
+            <span className="dp-title">Zona de peligro</span>
+            <div className="export-row">
+              <button
+                className="btn btn-danger"
+                style={{ flex: 1 }}
+                type="button"
+                disabled={borrando}
+                onClick={handleEliminar}
+              >
+                {borrando ? "Borrando…" : confirmandoBorrado ? "¿Seguro? Tocá de nuevo para confirmar" : "🗑 Eliminar esta guía"}
+              </button>
+              {confirmandoBorrado && !borrando && (
+                <button className="btn btn-ghost" type="button" onClick={() => setConfirmandoBorrado(false)}>
+                  Cancelar
+                </button>
+              )}
+            </div>
+            <span className="articulos-note">
+              Borra la guía y todos sus clientes de la base — pensado para limpiar guías de prueba. No se puede deshacer.
+            </span>
+          </div>
+        )}
       </div>
       {toastNode}
     </div>
