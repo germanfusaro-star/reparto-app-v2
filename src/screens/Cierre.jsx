@@ -146,12 +146,40 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
     }
     lines.push("");
     lines.push(["Detalle de transferencias"].join(";"));
-    lines.push(["Cliente", "Referencia", "Monto"].join(";"));
+    // Mismas columnas que el reporte de CobrApp, a pedido de Germán — así se pueden
+    // conciliar los dos reportes igual (ver DATA_MODEL.md).
+    lines.push(
+      [
+        "Código cliente",
+        "Nombre",
+        "Monto",
+        "Fecha",
+        "Origen",
+        "Destino",
+        "Referencia",
+        "Banco de Origen",
+        "Banco de Destino",
+        "CBU destino",
+      ].join(";")
+    );
     if (transferencias.length === 0) {
       lines.push("Sin transferencias cargadas en esta guía");
     } else {
       transferencias.forEach((t) => {
-        lines.push([csvEscape(t.clienteNombre), csvEscape(t.referencia || "s/d"), montoCsv(t.monto)].join(";"));
+        lines.push(
+          [
+            csvEscape(t.clienteId ?? "s/d"),
+            csvEscape(t.clienteNombre),
+            montoCsv(t.monto),
+            csvEscape(t.fecha || "s/f"),
+            csvEscape(t.origen || "s/d"),
+            csvEscape(t.destino || "s/d"),
+            csvEscape(t.referencia || "s/d"),
+            csvEscape(t.bancoOrigen || "s/d"),
+            csvEscape(t.bancoDestino || "s/d"),
+            csvEscape(t.cbuDestino || "s/d"),
+          ].join(";")
+        );
       });
     }
     lines.push("");
@@ -341,7 +369,11 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
                 <div className="cheque-report-row" key={i}>
                   <div className="cr-main">
                     <span className="cr-name">{t.clienteNombre}</span>
-                    <span className="cr-sub">{t.referencia || "Sin referencia"}</span>
+                    <span className="cr-sub">
+                      {t.origen ? `De ${t.origen}` : "Origen sin datos"}
+                      {t.bancoOrigen ? ` · ${t.bancoOrigen}` : ""}
+                      {t.referencia ? ` · ${t.referencia}` : ""}
+                    </span>
                   </div>
                   <span className="cr-amt">{fmt(t.monto)}</span>
                 </div>

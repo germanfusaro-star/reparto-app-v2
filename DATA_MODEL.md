@@ -390,13 +390,31 @@ Al tocar "Transferencia" el chofer puede escanear el comprobante con la cámara 
 elegirlo de la galería o abrirlo como PDF, en vez de tipear el monto a mano: se lee el
 comprobante con IA (`claude-sonnet-4-6` vía un proxy serverless en `api/process.js`, con
 compresión de imagen del lado del cliente para no pasarse del límite de payload de Vercel
-— mismo aprendizaje que CobrApp) y la app le muestra al chofer el monto detectado, más una
-referencia corta (banco/billetera, CBU o alias, número de operación — lo que haya en el
-comprobante), para que confirme ("Agregar") o corrija los datos antes de sumarlos a la
-lista de transferencias del cliente. Un cliente puede tener varias transferencias
-(`transferencias_detalle`, igual que los cheques) — por ejemplo si paga en más de una
-tanda — y también se puede cargar una transferencia a mano sin escanear, con monto y
-referencia libres.
+— mismo aprendizaje que CobrApp), y la app le muestra al chofer los datos detectados para
+que confirme ("Agregar") o corrija antes de sumarlos a la lista de transferencias del
+cliente. Un cliente puede tener varias transferencias (`transferenciasDetalle`, igual que
+los cheques) — por ejemplo si paga en más de una tanda — y también se puede cargar una
+transferencia a mano sin escanear, con monto y referencia libres.
+
+**Campos del reporte — iguales a los de CobrApp (a pedido de Germán, 2026-09-15), para
+poder conciliar los dos reportes de la misma forma.** Cada transferencia guarda: `monto`,
+`fecha` (de la operación, tal cual figura en el comprobante), `origen` (nombre de quien
+envía), `destino` (nombre de quien recibe), `referencia` (N° de operación), `bancoOrigen`,
+`bancoDestino` y `cbuDestino`. `api/process.js` le pide estos mismos campos a la IA (con
+`null` para lo que no aparezca en el comprobante, nunca un texto inventado) y solo
+descarta el resultado completo si no pudo leer el monto con certeza — el resto de los
+campos pueden venir vacíos sin problema. Si el chofer corrige el monto o la referencia de
+un escaneo antes de confirmar (`corregirScan` en `DetalleCliente.jsx`), el resto de los
+datos detectados no se pierde — se guarda aparte (`transExtra`) y se suma igual al
+confirmar. Una transferencia cargada 100% a mano (sin escanear) solo tiene `referencia` y
+`monto`; los demás campos quedan vacíos porque no hay de dónde sacarlos.
+
+`listarTransferenciasDeGuia()` en `src/data/guias.js` arma el reporte completo por guía,
+agregando el código y nombre del cliente a cada transferencia (`clienteId`, `clienteNombre`
+— vienen del documento del cliente, no del comprobante). El CSV de rendición
+(`Cierre.jsx → descargarCsv()`) exporta la sección "Detalle de transferencias" con las
+columnas en este orden: Código cliente, Nombre, Monto, Fecha, Origen, Destino, Referencia,
+Banco de Origen, Banco de Destino, CBU destino.
 
 ## Borrar una guía (limpieza de guías de prueba)
 

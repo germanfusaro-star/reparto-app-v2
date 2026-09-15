@@ -48,7 +48,14 @@ export default function DetalleCliente({ guiaId, cliente, onVolver }) {
   );
   const [transForm, setTransForm] = React.useState({ referencia: "", monto: "" });
   const [transMontoCargado, setTransMontoCargado] = React.useState(0);
-  const [scan, setScan] = React.useState(null); // {status:'scanning'|'result'|'error', thumb, detected, referencia, error}
+  // Si el chofer corrigió el monto/referencia de un escaneo (corregirScan más abajo), el
+  // resto de los datos detectados (origen, destino, bancos, CBU) no se pierden — quedan
+  // acá para sumarlos igual al confirmar manualmente (agregarTransferencia).
+  const [transExtra, setTransExtra] = React.useState(null);
+  // scan: {status:'scanning'|'result'|'error', thumb, isPdf, detected, fecha, origen,
+  // destino, referencia, bancoOrigen, bancoDestino, cbuDestino, error} — los mismos campos
+  // que trae CobrApp de sus comprobantes (a pedido de Germán, ver api/process.js).
+  const [scan, setScan] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
   const fileInputRef = React.useRef(null);
   const { showToast, toastNode } = useToast();
@@ -193,9 +200,17 @@ export default function DetalleCliente({ guiaId, cliente, onVolver }) {
       showToast("Cargá el monto de la transferencia.");
       return;
     }
-    setTransferenciaDraft((list) => [...list, { referencia: transForm.referencia.trim(), monto }]);
+    // Carga manual (sin escanear, o corrigiendo un escaneo) — si viene de corregir un
+    // escaneo, transExtra trae el resto de los campos del reporte (origen, destino,
+    // bancos, CBU); si es 100% manual, esos campos quedan vacíos porque no hay de dónde
+    // sacarlos.
+    setTransferenciaDraft((list) => [
+      ...list,
+      { referencia: transForm.referencia.trim(), monto, ...(transExtra || {}) },
+    ]);
     setTransForm({ referencia: "", monto: "" });
     setTransMontoCargado(0);
+    setTransExtra(null);
     setPayOn((p) => ({ ...p, transferencia: true }));
   }
 
@@ -226,7 +241,19 @@ export default function DetalleCliente({ guiaId, cliente, onVolver }) {
         setScan({ status: "error", thumb: dataUrl, isPdf, error: "No se pudo leer el monto con certeza — cargalo a mano." });
         return;
       }
-      setScan({ status: "result", thumb: dataUrl, isPdf, detected: body.monto, referencia: body.referencia || "" });
+      setScan({
+        status: "result",
+        thumb: dataUrl,
+        isPdf,
+        detected: body.monto,
+        fecha: body.fecha || "",
+        origen: body.origen || "",
+        destino: body.destino || "",
+        referencia: body.referencia || "",
+        bancoOrigen: body.bancoOrigen || "",
+        bancoDestino: body.bancoDestino || "",
+        cbuDestino: body.cbuDestino || "",
+      });
     } catch (err) {
       setScan({ status: "error", thumb: null, isPdf, error: err.message || "Error leyendo el comprobante." });
     }
@@ -234,7 +261,19 @@ export default function DetalleCliente({ guiaId, cliente, onVolver }) {
 
   function confirmarScan() {
     if (!scan || scan.detected == null) return;
-    setTransferenciaDraft((list) => [...list, { referencia: scan.referencia || "", monto: scan.detected }]);
+    setTransferenciaDraft((list) => [
+      ...list,
+      {
+        referencia: scan.referencia || "",
+        monto: scan.detected,
+        fecha: scan.fecha || "",
+        origen: scan.origen || "",
+        destino: scan.destino || "",
+        bancoOrigen: scan.bancoOrigen || "",
+        bancoDestino: scan.bancoDestino || "",
+        cbuDestino: scan.cbuDestino || "",
+      },
+    ]);
     setPayOn((p) => ({ ...p, transferencia: true }));
     setScan(null);
     showToast("Transferencia agregada.");
@@ -244,6 +283,14 @@ export default function DetalleCliente({ guiaId, cliente, onVolver }) {
     if (!scan) return;
     setTransForm({ referencia: scan.referencia || "", monto: String(scan.detected ?? "") });
     setTransMontoCargado(scan.detected || 0);
+    setTransExtra({
+      fecha: scan.fecha || "",
+      origen: scan.origen || "",
+      destino: scan.destino || "",
+      bancoOrigen: scan.bancoOrigen || "",
+      bancoDestino: scan.bancoDestino || "",
+      cbuDestino: scan.cbuDestino || "",
+    });
     setScan(null);
   }
 
@@ -504,7 +551,12 @@ export default function DetalleCliente({ guiaId, cliente, onVolver }) {
                   {transferenciaDraft.map((t, idx) => (
                     <div className="cheque-item" key={idx}>
                       <div className="ci-main">
-                        <span className="ci-num">{t.referencia || "Sin referencia"}</span>
+                        <span className="ci-num">{t.origen || t.referencia || "Sin datos"}</span>
+                        {(t.bancoOrigen || t.referencia) && (
+                          <span className="ci-sub">
+                            {[t.bancoOrigen, t.origen && t.referencia ? t.referencia : null].filter(Boolean).join(" · ")}
+                          </span>
+                        )}
                       </div>
                       <span className="ci-amt">{fmt(t.monto)}</span>
                       <button type="button" className="ci-rm" aria-label="Quitar transferencia" onClick={() => quitarTransferencia(idx)}>
@@ -538,6 +590,8 @@ export default function DetalleCliente({ guiaId, cliente, onVolver }) {
                         <div className="scan-detected">
                           <span className="sd-lbl">Monto detectado</span>
                           <span className="sd-val">{fmtDecimal(scan.detected)}</span>
+                          {scan.origen && <span className="scan-note">De: {scan.origen}</span>}
+                          {scan.bancoOrigen && <span className="scan-note">{scan.bancoOrigen}</span>}
                           {scan.referencia && <span className="scan-note">{scan.referencia}</span>}
                         </div>
                       )}
