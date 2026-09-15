@@ -69,6 +69,32 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
   }
   const clientesCtaCte = clientes.filter((c) => (c.montoCtaCte || 0) > 0);
 
+  // El chofer necesita controlar el TOTAL físico devuelto por artículo (para cotejarlo
+  // contra la mercadería que trae de vuelta en el camión), no una fila por cada cliente
+  // que devolvió ese artículo — por eso acá se suman cantidad y monto de todas las líneas
+  // que comparten código (o descripción, si el artículo no tiene código cargado).
+  const articulosConsolidados = React.useMemo(() => {
+    const porArticulo = new Map();
+    articulosDevueltos.forEach((a) => {
+      const key = a.codigo ? `cod:${a.codigo}` : `desc:${a.descripcion}`;
+      const actual = porArticulo.get(key);
+      if (actual) {
+        actual.cantidadDevuelta += a.cantidadDevuelta;
+        actual.monto = Math.round((actual.monto + a.monto) * 100) / 100;
+        actual.clientes += 1;
+      } else {
+        porArticulo.set(key, {
+          codigo: a.codigo || "",
+          descripcion: a.descripcion,
+          cantidadDevuelta: a.cantidadDevuelta,
+          monto: a.monto,
+          clientes: 1,
+        });
+      }
+    });
+    return Array.from(porArticulo.values()).sort((a, b) => a.descripcion.localeCompare(b.descripcion));
+  }, [articulosDevueltos]);
+
   function descargarCsv() {
     const lines = [];
     lines.push("Rendición de guía;" + csvEscape(guia?.guiaId));
@@ -198,6 +224,16 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
       </div>
 
       <div className="scroll">
+        {guia?.modificadoLuegoDeAviso && (
+          <div className="alert-card">
+            <span className="ic">⚠️</span>
+            <span>
+              <b>Se avisó que terminó el reparto y después se modificó algo</b>
+              <span>Revisar los cambios antes de dar la rendición por buena.</span>
+            </span>
+          </div>
+        )}
+
         <div className="totales-grid">
           <div className="tot-tile">
             <span className="lbl">Total guía</span>
@@ -231,17 +267,20 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
 
         {abierto === "devuelto" && (
           <div className="detalle-panel">
-            <span className="dp-title">Artículos devueltos ({articulosDevueltos.length})</span>
-            {articulosDevueltos.length === 0 ? (
+            <span className="dp-title">Artículos devueltos ({articulosConsolidados.length})</span>
+            {articulosConsolidados.length === 0 ? (
               <span className="articulos-note">No se marcó ningún artículo devuelto en esta guía.</span>
             ) : (
-              articulosDevueltos.map((a, i) => (
+              articulosConsolidados.map((a, i) => (
                 <div className="cheque-report-row" key={i}>
                   <div className="cr-main">
-                    <span className="cr-name">{a.clienteNombre}</span>
-                    <span className="cr-sub">
+                    <span className="cr-name">
                       {a.codigo && <>Cód. {a.codigo} · </>}
-                      {a.descripcion} · {a.cantidadDevuelta} un. · N° {a.comprobanteNumero}
+                      {a.descripcion}
+                    </span>
+                    <span className="cr-sub">
+                      {a.cantidadDevuelta} un. en total
+                      {a.clientes > 1 ? ` · ${a.clientes} clientes` : ""}
                     </span>
                   </div>
                   <span className="cr-amt">{fmt(a.monto)}</span>

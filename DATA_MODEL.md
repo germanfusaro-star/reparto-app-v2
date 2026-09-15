@@ -388,8 +388,18 @@ CSV de rendición (`src/data/guias.js` expone `listarTransferenciasDeGuia()` igu
 Cta. corriente, Transferencias y Cheques son botones (`tot-tile clickable`) — al tocar
 uno se abre, debajo del grid de totales, un panel con el detalle consolidado de esa guía
 (y toca otra vez para cerrarlo; tocar una pastilla distinta cambia el panel). El de
-"Devuelto" muestra cada artículo devuelto (cliente, código, descripción, cantidad y
-monto), armado con `listarArticulosDevueltosDeGuia()` recorriendo
-`comprobantes[].items[].cantidadDevuelta` de todos los clientes. El de "Cta. corriente"
-lista los clientes con `montoCtaCte > 0`. Efectivo y "Neto a rendir" quedan como pastillas
-simples, sin detalle desplegable, porque no tienen un desglose adicional que mostrar.
+"Cta. corriente" lista los clientes con `montoCtaCte > 0`. Efectivo y "Neto a rendir"
+quedan como pastillas simples, sin detalle desplegable, porque no tienen un desglose
+adicional que mostrar.
+
+El de **"Devuelto" consolida por artículo, no por cliente**: `listarArticulosDevueltosDeGuia()`
+en `src/data/guias.js` sigue armando una línea por cliente/comprobante/artículo (recorriendo
+`comprobantes[].items[].cantidadDevuelta` de todos los clientes — eso no cambió, y es lo
+que sigue exportando el CSV, línea por línea, para el detalle contable). Pero el panel que
+ve el chofer al tocar la pastilla agrupa esas líneas por artículo (`Cierre.jsx`,
+`articulosConsolidados`, agrupando por código o por descripción si el artículo no tiene
+código) y suma cantidad y monto entre todos los clientes que lo devolvieron — así el chofer
+puede cotejar de un vistazo el total de cada artículo contra la mercadería física que trae
+de vuelta en el camión, en vez de tener que sumar a mano varias filas del mismo producto
+repartidas entre distintos clientes. Si más de un cliente devolvió el mismo artículo, el
+renglón consolidado aclara "· N clientes".

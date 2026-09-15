@@ -85,6 +85,7 @@ export async function calcularResumenGlobal(filtro = {}) {
       totalCtaCte: resumen.totales.totalCtaCte,
       cantidadAlertas: resumen.alertas.length,
       avisoFinReparto: !!guia.avisoFinReparto,
+      modificadoLuegoDeAviso: !!guia.modificadoLuegoDeAviso,
     });
 
     // Incidencias: no solo las alertas de "cobrado vs. condición nominal" (ya calculadas
@@ -124,6 +125,10 @@ export async function calcularResumenGlobal(filtro = {}) {
   // Choferes que avisaron que terminaron de repartir pero todavía no cerraron/rindieron
   // la guía — para que el panel de admin lo vea sin depender de un mensaje aparte.
   const avisos = filasOrdenadas.filter((f) => f.avisoFinReparto && f.estado === "abierta");
+  // Guías donde el chofer avisó que terminó y DESPUÉS cargó o corrigió algo, sin volver a
+  // avisar — la "llave" del fin de reparto (ver DATA_MODEL.md). Todavía abiertas: hay que
+  // revisarlas antes de que se cierren/rindan.
+  const avisosModificados = filasOrdenadas.filter((f) => f.modificadoLuegoDeAviso && f.estado === "abierta");
   return {
     kpis: {
       cantidadGuias: guiasEnRango.length,
@@ -137,5 +142,6 @@ export async function calcularResumenGlobal(filtro = {}) {
     filas: filasOrdenadas,
     incidencias,
     avisos,
+    avisosModificados,
   };
 }

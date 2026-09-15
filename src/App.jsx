@@ -12,6 +12,7 @@ import {
   listarTransferenciasDeGuia,
   listarArticulosDevueltosDeGuia,
 } from "./data/guias";
+import { guardarSesion, leerSesion, borrarSesion } from "./lib/sesion";
 
 export default function App() {
   const [screen, setScreen] = React.useState("login");
@@ -29,6 +30,15 @@ export default function App() {
     setClientes(lista);
     return lista;
   }
+
+  // Al abrir la app, si quedó una guía activa guardada en este celular (ver
+  // src/lib/sesion.js), la retoma sola — el chofer no tiene que volver a tipear el
+  // número de guía cada vez que sale y vuelve a entrar a mitad de reparto.
+  React.useEffect(() => {
+    const s = leerSesion();
+    if (s) handleIniciar(s.chofer, s.guiaId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleIniciar(nombreChofer, guiaIdInput) {
     setLoading(true);
@@ -56,8 +66,12 @@ export default function App() {
             clientes: listaClientes,
           });
           setScreen("cierreView");
+          // Ya está cerrada — no queda reparto activo para retomar, así que no dejamos
+          // la sesión guardada (si el chofer entra de nuevo, arranca del login normal).
+          borrarSesion();
         } else {
           setScreen("lista");
+          guardarSesion(existente.choferNombre || nombreChofer, guiaIdInput);
         }
       } else {
         // Único paso que necesita señal: bajar el manifiesto de BigQuery y crear la
@@ -75,6 +89,7 @@ export default function App() {
         setChoferNombre(nombreChofer);
         await refreshClientes(guiaIdInput);
         setScreen("lista");
+        guardarSesion(nombreChofer, guiaIdInput);
       }
     } catch (err) {
       setErrorMsg(err.message || "Ocurrió un error al iniciar el reparto.");
@@ -86,6 +101,20 @@ export default function App() {
   function openDetalle(clienteId) {
     setSelectedClienteId(clienteId);
     setScreen("detalle");
+  }
+
+  // El chofer la usa para soltar la guía activa (por ejemplo si la tipeó mal, o si
+  // terminó y quiere arrancar otra sin pasar por el cierre) y volver al login limpio.
+  function handleNuevaGuia() {
+    borrarSesion();
+    setGuia(null);
+    setGuiaId(null);
+    setClientes([]);
+    setCierreData(null);
+    setChoferNombre("");
+    setSelectedClienteId(null);
+    setErrorMsg(null);
+    setScreen("login");
   }
 
   async function backToLista() {
@@ -105,6 +134,8 @@ export default function App() {
       const clientesFinal = await refreshClientes(guiaId);
       setCierreData({ totales, alertas, cheques, transferencias, articulosDevueltos, clientes: clientesFinal });
       setScreen("cierreView");
+      // Terminó el reparto — no queda nada activo que retomar la próxima vez que entre.
+      borrarSesion();
     } catch (err) {
       setErrorMsg(err.message || "No se pudo cerrar la guía.");
     } finally {
@@ -134,6 +165,7 @@ export default function App() {
           choferNombre={choferNombre}
           onAbrirCliente={openDetalle}
           onCerrarGuia={handleCerrar}
+          onNuevaGuia={handleNuevaGuia}
           loading={loading}
         />
       )}
