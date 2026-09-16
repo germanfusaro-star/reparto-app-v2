@@ -90,26 +90,42 @@ const QUERY = `
 // Total $225.823,61 (coincide con Sigma2k al centavo). Solo afecta a una parte de los
 // comprobantes (~15% en los últimos 30 días) — el resto no tiene percepción y esta
 // consulta simplemente no devuelve movimiento para esos clientes.
-const PERCEPCION_QUERY = `
-  SELECT
-    fecha,
-    cliente_id,
-    venta_mercaderia,
-    percepcion_iva
-  FROM (
+// Detectado el 2026-09-16: pasando @fechas/@clienteIds como parámetros de tipo ARRAY
+// (con `types: { fechas: ['DATE'], clienteIds: ['INT64'] }`), en producción (Vercel) la
+// consulta siempre devolvía 0 filas -- probada la misma consulta con los mismos valores
+// directo contra BigQuery (fuera del cliente de Node), sí devolvía resultados. No se pudo
+// determinar la causa exacta del bug de bindeo de parámetros tipo arreglo en ese cliente
+// dentro del entorno de Vercel, así que se lo evita: los valores (fechas y client_id que
+// ya extrajimos nosotros de BigQuery, no algo que tipee un usuario) se arman directo en el
+// texto de la consulta en vez de mandarse como parámetros.
+function construirPercepcionQuery(fechas, clienteIds) {
+  const fechasSql = fechas
+    .filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f))
+    .map((f) => `'${f}'`)
+    .join(', ');
+  const clienteIdsSql = clienteIds.filter((id) => Number.isInteger(id)).join(', ');
+  if (!fechasSql || !clienteIdsSql) return null;
+  return `
     SELECT
-      FECHA AS fecha,
-      MAX(SUBCUENTA) AS cliente_id,
-      ROUND(SUM(IF(CUENTA_CONTABLE_NUMERO = 41101, HABER, 0)), 2) AS venta_mercaderia,
-      ROUND(SUM(IF(CUENTA_CONTABLE_NUMERO = 21418, HABER, 0)), 2) AS percepcion_iva
-    FROM \`sigma-star-2.sigmarepo.bq_contable\`
-    WHERE COMPROBANTE_CODIGO = 'VENT'
-      AND FECHA IN UNNEST(@fechas)
-    GROUP BY ID, fecha
-  )
-  WHERE percepcion_iva > 0
-    AND cliente_id IN UNNEST(@clienteIds)
-`;
+      fecha,
+      cliente_id,
+      venta_mercaderia,
+      percepcion_iva
+    FROM (
+      SELECT
+        FECHA AS fecha,
+        MAX(SUBCUENTA) AS cliente_id,
+        ROUND(SUM(IF(CUENTA_CONTABLE_NUMERO = 41101, HABER, 0)), 2) AS venta_mercaderia,
+        ROUND(SUM(IF(CUENTA_CONTABLE_NUMERO = 21418, HABER, 0)), 2) AS percepcion_iva
+      FROM \`sigma-star-2.sigmarepo.bq_contable\`
+      WHERE COMPROBANTE_CODIGO = 'VENT'
+        AND FECHA IN (${fechasSql})
+      GROUP BY ID, fecha
+    )
+    WHERE percepcion_iva > 0
+      AND cliente_id IN (${clienteIdsSql})
+  `;
+}
 
 function fechaComoTexto(fecha) {
   if (!fecha) return null;
@@ -217,12 +233,9 @@ module.exports = async (req, res) => {
     const TOLERANCIA_CENTAVOS = 0.02;
     const percepcionPorClienteFecha = new Map();
     let filasPercepcion = [];
-    if (fechasSet.size > 0 && clienteIdsSet.size > 0) {
-      [filasPercepcion] = await bigquery.query({
-        query: PERCEPCION_QUERY,
-        params: { fechas: Array.from(fechasSet), clienteIds: Array.from(clienteIdsSet) },
-        types: { fechas: ['DATE'], clienteIds: ['INT64'] },
-      });
+    const percepcionQuery = construirPercepcionQuery(Array.from(fechasSet), Array.from(clienteIdsSet));
+    if (percepcionQuery) {
+      [filasPercepcion] = await bigquery.query({ query: percepcionQuery });
       filasPercepcion.forEach((f) => {
         const clave = `${fechaComoTexto(f.fecha)}|${f.cliente_id}`;
         if (!percepcionPorClienteFecha.has(clave)) percepcionPorClienteFecha.set(clave, []);
