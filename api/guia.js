@@ -216,8 +216,9 @@ module.exports = async (req, res) => {
     // no se lo vuelve a usar para otro comprobante del mismo cliente/día.
     const TOLERANCIA_CENTAVOS = 0.02;
     const percepcionPorClienteFecha = new Map();
+    let filasPercepcion = [];
     if (fechasSet.size > 0 && clienteIdsSet.size > 0) {
-      const [filasPercepcion] = await bigquery.query({
+      [filasPercepcion] = await bigquery.query({
         query: PERCEPCION_QUERY,
         params: { fechas: Array.from(fechasSet), clienteIds: Array.from(clienteIdsSet) },
         types: { fechas: ['DATE'], clienteIds: ['INT64'] },
@@ -268,6 +269,14 @@ module.exports = async (req, res) => {
       clientes.reduce((acc, c) => acc + c.monto_total, 0) * 100
     ) / 100;
 
+    // DEBUG TEMPORAL (2026-09-16) — para diagnosticar por qué la percepción de IVA no se
+    // está sumando en producción aunque la lógica cierra bien en pruebas directas contra
+    // BigQuery. Sacar este bloque una vez resuelto.
+    const comprobantesConPercepcion = clientes.reduce(
+      (acc, c) => acc + c.comprobantes.filter((comp) => comp.percepcion_iva).length,
+      0
+    );
+
     res.status(200).json({
       guia_id: guiaId,
       reparto_codigo: rows[0].reparto_codigo,
@@ -275,9 +284,17 @@ module.exports = async (req, res) => {
       fecha: fechaComoTexto(rows[0].comprobante_fecha),
       total_guia: totalGuia,
       clientes,
+      _debug: {
+        fechasSet: Array.from(fechasSet),
+        clienteIdsCount: clienteIdsSet.size,
+        clienteIdsSample: Array.from(clienteIdsSet).slice(0, 5),
+        filasPercepcionCount: filasPercepcion.length,
+        filasPercepcionSample: filasPercepcion.slice(0, 3),
+        comprobantesConPercepcion,
+      },
     });
   } catch (err) {
     console.error('Error consultando BigQuery:', err);
-    res.status(500).json({ error: 'Error consultando BigQuery', detalle: err.message });
+    res.status(500).json({ error: 'Error consultando BigQuery', detalle: err.message, stack: err.stack });
   }
 };
