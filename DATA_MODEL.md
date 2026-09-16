@@ -347,7 +347,12 @@ BigQuery") puede dejar un resto de unos pocos centavos que no es una cuenta corr
 real, y esas alertas de $0,12 o $0,37 solo generan ruido. `calcularTotalesYAlertas()` en
 `src/data/guias.js` solo dispara las dos alertas de arriba cuando el monto en cuestión
 (`montoCtaCte` o `montoCobrado`) es `>= $1` — por debajo de eso no alerta, aunque el monto
-siga sumado correctamente en los totales.
+siga sumado correctamente en los totales. El mismo umbral se usa en `Cierre.jsx` para la
+lista de "Clientes en cuenta corriente" (ver más abajo): un cliente que ya transfirió el
+pago completo, pero le quedó un resto de centavos en `montoCtaCte` por una diferencia de
+redondeo entre el monto de la factura y el monto transferido, no aparece ahí (detectado
+con la guía 4295 el 2026-09-16 — mostraba clientes que en realidad pagaron por
+transferencia, con $0, en la lista de cuenta corriente).
 
 ## Aviso de fin de reparto
 
@@ -477,7 +482,8 @@ CSV de rendición (`src/data/guias.js` expone `listarTransferenciasDeGuia()` igu
 Cta. corriente, Transferencias y Cheques son botones (`tot-tile clickable`) — al tocar
 uno se abre, debajo del grid de totales, un panel con el detalle consolidado de esa guía
 (y toca otra vez para cerrarlo; tocar una pastilla distinta cambia el panel). El de
-"Cta. corriente" lista los clientes con `montoCtaCte > 0`. Efectivo y "Neto a rendir"
+"Cta. corriente" lista los clientes con `montoCtaCte >= $1` (ver umbral de redondeo más
+arriba). Efectivo y "Neto a rendir"
 quedan como pastillas simples, sin detalle desplegable, porque no tienen un desglose
 adicional que mostrar.
 

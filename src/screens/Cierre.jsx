@@ -67,7 +67,14 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
   function toggleDetalle(key) {
     setAbierto((a) => (a === key ? null : key));
   }
-  const clientesCtaCte = clientes.filter((c) => (c.montoCtaCte || 0) > 0);
+  // Detectado con Germán el 2026-09-16 (guía 4295): clientes que ya transfirieron el pago
+  // completo aparecían igual en "Clientes en cuenta corriente" mostrando $0 — quedaba un
+  // resto de centavos en montoCtaCte por una diferencia de redondeo entre el monto de la
+  // factura y el monto transferido, no una deuda real. Mismo criterio que ya se usa para
+  // no alertar por redondeo (ver UMBRAL_ALERTA en src/data/guias.js): si el saldo es menor
+  // a $1, no cuenta como cuenta corriente.
+  const UMBRAL_CTACTE = 1;
+  const clientesCtaCte = clientes.filter((c) => (c.montoCtaCte || 0) >= UMBRAL_CTACTE);
   // Además del consolidado por artículo, el panel de "Devuelto" muestra por quién quedó
   // la devolución — parcial o no entregado — con el importe devuelto de cada uno, para
   // poder controlar contra qué cliente corresponde cada devolución sin tener que abrir la
