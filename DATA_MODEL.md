@@ -176,7 +176,7 @@ lectura — no escribe nada en Firestore.
   sesión anónima del chofer. Los usuarios se crean a mano desde Firebase Console, ver
   `ADMIN_SETUP.md`.
 - `src/admin/AdminApp.jsx` — pantalla login → dashboard → detalle de guía.
-- `src/admin/screens/AdminDashboard.jsx` — filtro por fecha (hoy/7/30 días/todo), KPIs
+- `src/admin/screens/AdminDashboard.jsx` — filtro por fecha (Actual/7 días/Todo), KPIs
   generales, tabla de guías y tabla de incidencias (entregas parciales, no entregados y
   las mismas alertas de cta. cte. que ve el chofer al cerrar), consolidadas entre todos
   los choferes y guías del rango.
@@ -184,7 +184,17 @@ lectura — no escribe nada en Firestore.
   chofer para mostrar la rendición de cualquier guía (esté abierta o cerrada todavía).
 - `src/data/admin.js` — lectura consolidada: `listarGuiasRecientes()`,
   `calcularResumenGuia(guiaId)` (misma fórmula que `cerrarGuia()` pero sin escribir, sirve
-  para guías aún no cerradas) y `calcularResumenGlobal({desde, hasta})`.
+  para guías aún no cerradas) y `calcularResumenGlobal({desde, hasta} | {actual: true})`.
+
+**Filtro "Actual" — no es "hoy" por calendario.** Detectado con Germán el 2026-09-16: la
+`fecha` de la guía es la del comprobante en Sigma2k, que suele quedar un día atrás del
+reparto real (o la del sábado si el reparto es el lunes) — filtrar por la fecha de hoy
+siempre daba "sin guías en este rango". El filtro que antes se llamaba "Hoy" (y filtraba
+por la fecha de hoy) pasó a llamarse **"Actual"**: en vez de usar la fecha del calendario,
+`calcularResumenGlobal({actual: true})` busca la fecha más reciente que efectivamente haya
+entre las guías traídas y filtra por esa — así siempre muestra el último reparto cargado,
+sea cual sea su fecha real. También se sacó el filtro "30 días" (no se usaba) — quedan
+Actual, 7 días y Todo.
 - `src/data/guias.js` ahora expone `calcularTotalesYAlertas(clientes)` como función pura
   (extraída de `cerrarGuia()`) para que el panel de admin la reuse sin duplicar la lógica.
 - Se agregó un campo `motivoDevolucion` que el chofer carga (desplegable, opcional) cuando
