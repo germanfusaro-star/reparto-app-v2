@@ -41,20 +41,42 @@ manifiesto: agrupa `bq_contable` por movimiento (`ID`) — **sin filtrar ni agru
 "DEUDORES POR VENTAS" de cada movimiento; en las demás líneas (mercadería, IVA,
 percepción) `SUBCUENTA` viene en `0`. Agrupando por `ID` primero y sacando recién ahí el
 cliente con `MAX(SUBCUENTA)`, cada movimiento con percepción queda identificado por
-`fecha + cliente_id + monto de mercadería sin IVA` — esa combinación tiene que coincidir
-centavo a centavo con `fecha + cliente_id + SUM(ITEM_NETO)` del comprobante en `bq_ventas`
-(no hay un campo de número de comprobante en `bq_contable` para unir directo). Cuando
-coincide, la percepción se suma al `monto` de ese comprobante y al `monto_total` del
-cliente — no aparece como un artículo más, porque no es mercadería.
+`fecha + cliente_id + monto de mercadería sin IVA` — esa combinación se cruza contra
+`fecha + cliente_id + SUM(ITEM_NETO)` del comprobante en `bq_ventas` (no hay un campo de
+número de comprobante en `bq_contable` para unir directo). Cuando coincide, la percepción
+se suma al `monto` de ese comprobante y al `monto_total` del cliente — no aparece como un
+artículo más, porque no es mercadería.
+
+**El cruce es por monto más cercano, con tolerancia de 2 centavos — no por igualdad
+exacta.** Detectado con la guía 4295 (2026-09-16): en varios comprobantes el monto de
+mercadería sin IVA difiere en 1 o 2 centavos entre `bq_ventas` (suma de `ITEM_NETO`
+redondeado línea por línea) y `bq_contable` (`HABER` de la cuenta `41101`, redondeado del
+lado contable) — son dos cálculos distintos dentro de Sigma2k, no un error de acá, pero
+con un cruce por igualdad exacta de string esos comprobantes perdían la percepción entera
+(en esa guía, 3 de 8 comprobantes con percepción — $21.171 de $56.865). Ahora se agrupan
+los movimientos de `bq_contable` por `fecha + cliente_id` (sin el monto en la clave) y,
+para cada comprobante, se busca entre esos movimientos el de monto de mercadería más
+cercano, aceptando hasta $0,02 de diferencia; una vez usado un movimiento no se lo vuelve a
+usar para otro comprobante del mismo cliente/día (para no duplicar percepción si hay más
+de un comprobante con montos parecidos).
 
 Confirmado con el comprobante 00178649 de la guía 4290 (López Branco Valentín): mercadería
-$184.343,52 + IVA $36.295,08 + percepción $5.185,01 = $225.823,61, igual que en Sigma2k.
-Solo afecta a una parte de los comprobantes (~15% en los últimos 30 días, ~$9,6M
+$184.343,52 + IVA $36.295,08 + percepción $5.185,01 = $225.823,61, igual que en Sigma2k. Y
+con la guía 4295 completa: 8 de 26 comprobantes con percepción, $56.864,82 en total —
+sumado al resto, el total de la guía pasa de $4.831.769,10 a $4.888.633,92, igual que en el
+ERP. Solo afecta a una parte de los comprobantes (~15% en los últimos 30 días, ~$9,6M
 acumulados) — el resto de los clientes no tiene percepción y la consulta simplemente no
 les devuelve movimiento. **Limitación conocida:** si un comprobante con percepción se
 marca con entrega **parcial**, el descuento por artículo no reduce la percepción de forma
 proporcional (queda completa en el saldo a cobrar) — solo se descuenta del todo cuando el
 comprobante queda **no entregado**. Por ahora no se pidió resolver ese caso puntual.
+
+**Si después de deployar este cruce tolerante una guía sigue sin sumar la percepción**,
+antes de sospechar del código conviene confirmar que el deploy en Vercel efectivamente
+levantó el commit nuevo (a veces el zip subido a GitHub no es el último) — una guía que ya
+existía en Firestore antes del deploy nunca se vuelve a traer sola de BigQuery (ver más
+abajo), así que hay que borrarla desde el panel de admin y que el chofer la vuelva a tomar
+para que se recalcule con el código actualizado.
 
 ```json
 {

@@ -205,7 +205,17 @@ module.exports = async (req, res) => {
         clienteIdsSet.add(cliente.cliente_id);
       }
     }
-    const percepcionPorClave = new Map();
+    // Detectado con la guía 4295 (2026-09-16): el monto de mercadería sin IVA a veces
+    // difiere en 1 o 2 centavos entre bq_ventas (suma de ITEM_NETO redondeado por línea) y
+    // bq_contable (HABER de la cuenta 41101, redondeado del lado contable) — son dos
+    // cálculos distintos del lado de Sigma2k, no un error nuestro, pero un cruce por
+    // igualdad exacta de string perdía la percepción entera de esos comprobantes. Ahora se
+    // agrupa por fecha+cliente (sin el monto en la clave) y se busca, entre los movimientos
+    // de ese cliente en esa fecha, el que tenga el monto de mercadería MÁS CERCANO al del
+    // comprobante, aceptando hasta 2 centavos de diferencia — y una vez usado un movimiento
+    // no se lo vuelve a usar para otro comprobante del mismo cliente/día.
+    const TOLERANCIA_CENTAVOS = 0.02;
+    const percepcionPorClienteFecha = new Map();
     if (fechasSet.size > 0 && clienteIdsSet.size > 0) {
       const [filasPercepcion] = await bigquery.query({
         query: PERCEPCION_QUERY,
@@ -213,19 +223,37 @@ module.exports = async (req, res) => {
         types: { fechas: ['DATE'], clienteIds: ['INT64'] },
       });
       filasPercepcion.forEach((f) => {
-        const clave = `${fechaComoTexto(f.fecha)}|${f.cliente_id}|${f.venta_mercaderia}`;
-        percepcionPorClave.set(clave, f.percepcion_iva);
+        const clave = `${fechaComoTexto(f.fecha)}|${f.cliente_id}`;
+        if (!percepcionPorClienteFecha.has(clave)) percepcionPorClienteFecha.set(clave, []);
+        percepcionPorClienteFecha.get(clave).push({
+          ventaMercaderia: f.venta_mercaderia,
+          percepcionIva: f.percepcion_iva,
+          usada: false,
+        });
       });
     }
 
     for (const cliente of clientesPorId.values()) {
       for (const comp of cliente.comprobantesPorNumero.values()) {
-        const clave = `${comp._fecha}|${cliente.cliente_id}|${comp._montoMercaderiaSinIva}`;
-        const percepcion = percepcionPorClave.get(clave);
-        if (percepcion) {
-          comp.percepcion_iva = percepcion;
-          comp.monto = Math.round((comp.monto + percepcion) * 100) / 100;
-          cliente.monto_total = Math.round((cliente.monto_total + percepcion) * 100) / 100;
+        const clave = `${comp._fecha}|${cliente.cliente_id}`;
+        const candidatos = percepcionPorClienteFecha.get(clave);
+        if (candidatos) {
+          let mejor = null;
+          let mejorDif = null;
+          for (const candidato of candidatos) {
+            if (candidato.usada) continue;
+            const dif = Math.abs(candidato.ventaMercaderia - comp._montoMercaderiaSinIva);
+            if (dif <= TOLERANCIA_CENTAVOS && (mejorDif === null || dif < mejorDif)) {
+              mejor = candidato;
+              mejorDif = dif;
+            }
+          }
+          if (mejor) {
+            mejor.usada = true;
+            comp.percepcion_iva = mejor.percepcionIva;
+            comp.monto = Math.round((comp.monto + mejor.percepcionIva) * 100) / 100;
+            cliente.monto_total = Math.round((cliente.monto_total + mejor.percepcionIva) * 100) / 100;
+          }
         }
         delete comp._fecha;
         delete comp._montoMercaderiaSinIva;
