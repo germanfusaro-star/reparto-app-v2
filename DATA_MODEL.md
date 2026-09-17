@@ -506,6 +506,13 @@ transferencias (si hay), los artículos devueltos consolidados (si hay), y al fi
 líneas para firma (chofer / administración) — pensado para poder imprimirlo en papel y
 que quede firmado, no solo para guardarlo como archivo.
 
+La tabla de transferencias del PDF tiene las mismas 10 columnas que el CSV de rendición y
+que el reporte de CobrApp (Código cliente, Nombre, Monto, Fecha, Origen, Destino,
+Referencia, Banco de Origen, Banco de Destino, CBU destino) — a propósito, para poder
+conciliar los tres reportes sin reordenar nada. Por tener tantas columnas usa una clase
+aparte (`.pr-table-compact` en `src/styles.css`, letra más chica y las celdas envuelven el
+texto en vez de forzar una sola línea) para entrar en el ancho de una hoja normal.
+
 Funciona igual desde la app del chofer (el botón está en el `Cierre` compartido, no es
 exclusivo del panel de admin), aunque el pedido puntual fue para poder sacarlo desde
 administración una vez que la guía está cerrada.

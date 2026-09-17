@@ -662,24 +662,37 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
         {transferencias.length > 0 && (
           <>
             <h2>Detalle de transferencias ({transferencias.length})</h2>
-            <table className="pr-table">
+            {/* Mismas columnas que el CSV de rendición y que el reporte de CobrApp, a pedido
+                de Germán (ver DATA_MODEL.md) — así se puede conciliar directamente contra
+                ese reporte sin tener que reordenar nada. */}
+            <table className="pr-table pr-table-compact">
               <thead>
                 <tr>
-                  <th>Cliente</th>
-                  <th>Origen</th>
-                  <th>Banco origen</th>
-                  <th>Referencia</th>
+                  <th>Cód. cliente</th>
+                  <th>Nombre</th>
                   <th className="num">Monto</th>
+                  <th>Fecha</th>
+                  <th>Origen</th>
+                  <th>Destino</th>
+                  <th>Referencia</th>
+                  <th>Banco origen</th>
+                  <th>Banco destino</th>
+                  <th>CBU destino</th>
                 </tr>
               </thead>
               <tbody>
                 {transferencias.map((t, i) => (
                   <tr key={i}>
+                    <td>{t.clienteId ?? "s/d"}</td>
                     <td>{t.clienteNombre}</td>
-                    <td>{t.origen || "s/d"}</td>
-                    <td>{t.bancoOrigen || "s/d"}</td>
-                    <td>{t.referencia || "s/d"}</td>
                     <td className="num">{fmt(t.monto)}</td>
+                    <td>{t.fecha || "s/f"}</td>
+                    <td>{t.origen || "s/d"}</td>
+                    <td>{t.destino || "s/d"}</td>
+                    <td>{t.referencia || "s/d"}</td>
+                    <td>{t.bancoOrigen || "s/d"}</td>
+                    <td>{t.bancoDestino || "s/d"}</td>
+                    <td>{t.cbuDestino || "s/d"}</td>
                   </tr>
                 ))}
               </tbody>
