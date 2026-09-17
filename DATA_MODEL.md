@@ -88,6 +88,7 @@ para que se recalcule con el código actualizado.
   "clientes": [
     {
       "cliente_id": 800015614,
+      "cliente_codigo": "004266",
       "nombre": "AGUIRRE MARIA ELENA",
       "direccion": "CORRIENTES 896   SAN CARLOS CENTRO",
       "localidad": "SAN CARLOS CENTRO",
@@ -250,7 +251,16 @@ guias/{guiaId}
   aviso_fin_reparto_en: timestamp | null
 
   guias/{guiaId}/clientes/{clienteId}
-    cliente_id, nombre, direccion, localidad, zona, lat, lon
+    cliente_id, cliente_codigo, nombre, direccion, localidad, zona, lat, lon
+    // cliente_id es el CLIENTE_ID interno de BigQuery (usado como id de documento y como
+    // clave de join contra bq_contable) — NO es el código de cliente de Sigma2k. Detectado
+    // con Germán el 2026-09-17: el PDF de rendición mostraba cliente_id (ej. 800016182)
+    // como "código de cliente" y no coincidía con el ERP. cliente_codigo es el campo
+    // CLIENTE (STRING) de bq_ventas, que sí es el código visible en Sigma2k (ej. "004266"
+    // para ese mismo cliente) — es el que hay que mostrar en cualquier pantalla/reporte
+    // (CSV, PDF) que diga "Código cliente". Guías creadas antes de este cambio no tienen
+    // cliente_codigo en Firestore; las pantallas que lo muestran (CSV y PDF de
+    // transferencias en Cierre.jsx) hacen fallback a cliente_id en ese caso.
     comprobantes: [ { numero, tipo, condicion_venta, condicion_venta_desc,
                        espera_cobro_inmediato, monto } ]
     monto_total: number

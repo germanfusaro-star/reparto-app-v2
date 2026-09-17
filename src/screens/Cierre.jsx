@@ -175,7 +175,7 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
       transferencias.forEach((t) => {
         lines.push(
           [
-            csvEscape(t.clienteId ?? "s/d"),
+            csvEscape(t.clienteCodigo ?? t.clienteId ?? "s/d"),
             csvEscape(t.clienteNombre),
             montoCsv(t.monto),
             csvEscape(t.fecha || "s/f"),
@@ -683,7 +683,7 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
               <tbody>
                 {transferencias.map((t, i) => (
                   <tr key={i}>
-                    <td>{t.clienteId ?? "s/d"}</td>
+                    <td>{t.clienteCodigo ?? t.clienteId ?? "s/d"}</td>
                     <td>{t.clienteNombre}</td>
                     <td className="num">{fmt(t.monto)}</td>
                     <td>{t.fecha || "s/f"}</td>

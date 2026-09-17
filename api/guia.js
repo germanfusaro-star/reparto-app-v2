@@ -36,6 +36,13 @@ function getBigQueryClient() {
 const QUERY = `
   SELECT
     CLIENTE_ID AS cliente_id,
+    -- CLIENTE_ID es un id interno de BigQuery — NO es el código de cliente que se ve en
+    -- Sigma2k. Detectado con Germán el 2026-09-17: el PDF de rendición mostraba
+    -- CLIENTE_ID (ej. 800016182) como "código de cliente", pero en el ERP ese cliente
+    -- figura con otro código (ej. "004266"). El campo CLIENTE (STRING) es el que
+    -- coincide con el código visible en Sigma2k — verificado contra bq_ventas para el
+    -- cliente COSTARELLI CARLOS OSVALDO (CLIENTE_ID 800016182 → CLIENTE "004266").
+    CLIENTE AS cliente_codigo,
     CLIENTE_NOMBRE AS cliente_nombre,
     CLIENTE_DIRECCION AS cliente_direccion,
     CLIENTE_LOCALIDAD AS cliente_localidad,
@@ -166,6 +173,7 @@ module.exports = async (req, res) => {
       if (!clientesPorId.has(row.cliente_id)) {
         clientesPorId.set(row.cliente_id, {
           cliente_id: row.cliente_id,
+          cliente_codigo: row.cliente_codigo,
           nombre: row.cliente_nombre,
           direccion: row.cliente_direccion,
           localidad: row.cliente_localidad,

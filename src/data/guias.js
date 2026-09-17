@@ -68,6 +68,11 @@ export async function crearGuiaDesdeManifiesto(manifiesto, choferNombre) {
     }));
     batch.set(clienteRef(guiaId, cliente.cliente_id), {
       clienteId: cliente.cliente_id,
+      // Código de cliente visible en Sigma2k (distinto de clienteId, que es un id interno
+      // de BigQuery) — ver api/guia.js. Guías creadas antes del 2026-09-17 no tienen este
+      // campo en Firestore (quedan con clienteCodigo undefined); las pantallas que lo
+      // muestran hacen fallback a clienteId en ese caso.
+      clienteCodigo: cliente.cliente_codigo ?? null,
       nombre: cliente.nombre,
       direccion: cliente.direccion,
       localidad: cliente.localidad,
@@ -306,7 +311,7 @@ export async function listarTransferenciasDeGuia(guiaId) {
   const transferencias = [];
   clientes.forEach((c) => {
     (c.transferenciasDetalle || []).forEach((t) => {
-      transferencias.push({ clienteId: c.clienteId, clienteNombre: c.nombre, ...t });
+      transferencias.push({ clienteId: c.clienteId, clienteCodigo: c.clienteCodigo, clienteNombre: c.nombre, ...t });
     });
   });
   return transferencias;
