@@ -487,6 +487,29 @@ arriba). Efectivo y "Neto a rendir"
 quedan como pastillas simples, sin detalle desplegable, porque no tienen un desglose
 adicional que mostrar.
 
+## Reporte en PDF / para imprimir
+
+Pedido por Germán el 2026-09-17: un botón para sacar la rendición de una guía en PDF desde
+el panel de administración. El botón **"🖨 PDF"**, al lado de "Exportar CSV" y "WhatsApp"
+en `Cierre.jsx`, llama a `window.print()` — no se generó el PDF con ninguna librería (nada
+que agregar al bundle): el propio diálogo de impresión del navegador ya trae "Guardar como
+PDF" como destino, así que imprimir y exportar a PDF son la misma acción para el usuario.
+
+Lo que se imprime **no es la pantalla tal cual se ve** (con sus botones, pastillas de
+colores, etc.), sino un documento aparte armado solo para esto: un bloque `.print-report`
+que vive en el mismo `Cierre.jsx`, oculto en pantalla (`display:none`) y que solo se
+muestra dentro de `@media print` (`src/styles.css`) — al mismo tiempo que todo lo demás del
+componente (`.app-bar`, `.scroll`) se oculta con la clase `.no-print`. El documento trae:
+encabezado con el nombre de la empresa y el número de guía, datos de reparto/chofer/fecha,
+la grilla de totales, las alertas, la tabla de detalle por cliente, el detalle de cheques y
+transferencias (si hay), los artículos devueltos consolidados (si hay), y al final dos
+líneas para firma (chofer / administración) — pensado para poder imprimirlo en papel y
+que quede firmado, no solo para guardarlo como archivo.
+
+Funciona igual desde la app del chofer (el botón está en el `Cierre` compartido, no es
+exclusivo del panel de admin), aunque el pedido puntual fue para poder sacarlo desde
+administración una vez que la guía está cerrada.
+
 El de **"Devuelto" consolida por artículo, no por cliente**: `listarArticulosDevueltosDeGuia()`
 en `src/data/guias.js` sigue armando una línea por cliente/comprobante/artículo (recorriendo
 `comprobantes[].items[].cantidadDevuelta` de todos los clientes — eso no cambió, y es lo

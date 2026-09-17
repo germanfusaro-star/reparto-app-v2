@@ -466,6 +466,55 @@ h1,h2,h3{
 .clickable-row{ cursor:pointer; }
 .clickable-row:hover{ background:var(--surface-2); }
 
+/* ---- reporte para imprimir / PDF (Cierre.jsx, botón "🖨 PDF") ----
+   El documento normal de la pantalla (.app-bar, .scroll, incluida la "Zona de peligro")
+   se marca .no-print y se oculta al imprimir; en su lugar se muestra .print-report, un
+   documento aparte armado solo con tablas simples en blanco y negro, pensado para
+   imprimir en papel o guardar como PDF desde el diálogo de impresión del navegador (no
+   hace falta ninguna librería de PDF: "Guardar como PDF" ya es una opción estándar ahí). */
+.print-report{ display:none; }
+@media print{
+  .no-print{ display:none !important; }
+  .print-report{ display:block !important; }
+  @page{ margin:14mm; }
+  html,body,#root,.app-root,.admin-root{ height:auto; max-width:none; background:#fff; }
+  .print-report{
+    font-family:'Public Sans', system-ui, sans-serif;
+    color:#161009;
+    padding:0 4px;
+  }
+  .print-report h1{ font-size:1.4rem; margin:0; text-transform:none; letter-spacing:normal; }
+  .print-report h2{
+    font-size:.9rem; text-transform:uppercase; letter-spacing:.04em; color:#161009;
+    margin:16px 0 6px; padding-bottom:3px; border-bottom:1px solid #161009;
+  }
+  .pr-header{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid #161009; padding-bottom:8px; }
+  .pr-header span{ font-size:.78rem; color:#4a4038; }
+  .pr-header-meta{ display:flex; flex-direction:column; align-items:flex-end; gap:2px; font-weight:600; }
+  .pr-warn{ font-size:.8rem; font-weight:700; margin:10px 0 0; }
+  table.pr-meta-table, table.pr-totales-table, table.pr-table{
+    width:100%; border-collapse:collapse; font-size:.78rem; margin-top:4px;
+  }
+  .pr-meta-table td{ padding:3px 6px 3px 0; }
+  .pr-meta-table td:nth-child(1), .pr-meta-table td:nth-child(3){ color:#4a4038; white-space:nowrap; }
+  .pr-totales-table td{ padding:4px 6px; border-bottom:1px dashed #ccc; }
+  .pr-totales-table td:nth-child(1), .pr-totales-table td:nth-child(3){ color:#4a4038; }
+  .pr-totales-table tr.pr-neto-row td{ border-top:1px solid #161009; border-bottom:none; font-weight:700; padding-top:6px; }
+  .pr-table{ margin-bottom:4px; }
+  .pr-table th{
+    text-align:left; font-size:.68rem; text-transform:uppercase; letter-spacing:.03em; color:#4a4038;
+    padding:4px 6px; border-bottom:1px solid #161009;
+  }
+  .pr-table td{ padding:4px 6px; border-bottom:1px dashed #ccc; }
+  .pr-table tr{ break-inside:avoid; }
+  .num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .pr-list{ margin:4px 0; padding-left:18px; font-size:.8rem; }
+  .pr-list li{ margin-bottom:3px; }
+  .pr-firmas{ display:flex; justify-content:space-between; gap:40px; margin-top:56px; }
+  .pr-firma{ flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; font-size:.76rem; color:#4a4038; }
+  .pr-firma-linea{ width:100%; border-top:1px solid #161009; }
+}
+
 .toast{
   position:fixed; left:16px; right:16px; bottom:20px; max-width:488px; margin:0 auto;
   background:var(--brand-brown); color:#f7f1e6; padding:11px 14px; border-radius:11px;
