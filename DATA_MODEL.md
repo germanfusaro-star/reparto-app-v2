@@ -431,6 +431,28 @@ número, o si terminó y quiere arrancar otra guía sin pasar por el cierre de l
 Es solo una conveniencia local del celular: no toca nada en Firestore, así que si falla
 (modo privado, cuota llena) el chofer simplemente vuelve a tipear la guía como antes.
 
+**Red de seguridad si se pierde la sesión local (2026-09-19):** `localStorage` puede
+perderse por motivos ajenos a la app — Germán reportó que durante el día el chofer a
+veces tiene que volver a tipear el número de guía, algo que no debería pasar mientras no
+haya tocado "Finalizar reparto". La causa más probable no es un bug en la lógica de
+arriba (se revisó: `borrarSesion()` solo se llama al cerrar la guía o con "Cambiar de
+guía") sino que `localStorage` no es 100% confiable en el celular — por ejemplo en iOS,
+Safari y una PWA instalada desde el ícono de inicio pueden tener almacenamiento separado
+para el mismo sitio, así que si el chofer entra unas veces desde el navegador y otras
+desde el ícono, la sesión guardada en uno no la ve el otro.
+
+Como esto no depende de arreglar la causa exacta (que varía según el celular), se agregó
+una segunda capa en `Login.jsx`, independiente de `localStorage`: al elegir su nombre,
+la app busca en Firestore (`buscarGuiaAbiertaDeChofer` en `src/data/guias.js`, query por
+`choferNombre + estado == "abierta"`, sin necesitar índice compuesto) si ese chofer ya
+tiene una guía sin cerrar. Si la encuentra, el campo "Número de guía" se reemplaza por un
+aviso ("Fulano ya tiene la guía #XXXX abierta — se retoma donde quedó") y el botón pasa a
+"Continuar reparto": alcanza con elegir el nombre para volver a entrar, sin tipear nada.
+Queda un enlace "No es esta guía, tipear otro número" por si el chofer realmente quiere
+arrancar una guía distinta sin cerrar la anterior (poco común, pero posible). Con esto,
+"loguearse de nuevo" (elegir el nombre) siempre alcanza para retomar el reparto en curso,
+más allá de si `localStorage` sobrevivió o no.
+
 ## Escaneo del comprobante de transferencia
 
 Al tocar "Transferencia" el chofer puede escanear el comprobante con la cámara del celular,

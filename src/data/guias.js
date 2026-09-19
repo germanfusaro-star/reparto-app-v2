@@ -14,6 +14,8 @@ import {
   collection,
   writeBatch,
   serverTimestamp,
+  query,
+  where,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { esperaCobroInmediato, compararPorCondicionYNombre } from "../lib/condiciones";
@@ -119,6 +121,33 @@ export async function avisarFinReparto(guiaId) {
 export async function obtenerGuia(guiaId) {
   const snap = await getDoc(guiaRef(guiaId));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+/**
+ * Busca si este chofer ya tiene una guía sin cerrar en curso — pensado como red de
+ * seguridad para cuando la sesión guardada en el celular (ver lib/sesion.js) se pierde
+ * (se borró la memoria del navegador, entró desde el ícono de la app en vez del
+ * navegador, cambió de celular, etc.): así, con solo elegir su nombre de nuevo en el
+ * login, la app le ofrece retomar esa guía sin que tenga que acordarse ni volver a
+ * tipear el número. Devuelve la guía completa (o null si no tiene ninguna abierta).
+ *
+ * Nota: es una consulta por igualdad en dos campos (choferNombre + estado), no necesita
+ * un índice compuesto en Firestore.
+ */
+export async function buscarGuiaAbiertaDeChofer(choferNombre) {
+  if (!choferNombre) return null;
+  const q = query(
+    collection(db, "guias"),
+    where("choferNombre", "==", choferNombre),
+    where("estado", "==", "abierta")
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const guias = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  // Si por algún motivo raro quedara más de una abierta a la vez, se toma la más
+  // reciente por fecha de apertura.
+  guias.sort((a, b) => (b.fechaApertura?.toMillis?.() ?? 0) - (a.fechaApertura?.toMillis?.() ?? 0));
+  return guias[0];
 }
 
 /** Clientes de la guía, ordenados por condición de venta predeterminada y luego por nombre. */

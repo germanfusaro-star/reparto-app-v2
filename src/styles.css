@@ -188,6 +188,10 @@ h1,h2,h3{
 .btn-danger:hover{ filter:brightness(0.95); }
 .btn-block{ width:100%; }
 .btn[disabled]{ opacity:.45; cursor:not-allowed; }
+/* Botón "de texto" chico — usado en Login para ofrecer cambiar entre la guía abierta
+   detectada y tipear otro número a mano (ver Login.jsx). */
+.btn-link{ background:none; border:none; padding:2px; color:var(--accent-strong); font-size:.78rem; font-weight:600; text-decoration:underline; cursor:pointer; align-self:center; }
+.btn-link:hover{ opacity:.8; }
 
 /* Solo aparece en el panel de admin (Cierre.jsx con onEliminarGuia) — borrar una guía
    completa, pensado para limpiar guías de prueba antes de pasar a producción. */
@@ -199,6 +203,7 @@ h1,h2,h3{
 .brand-mark p{ margin:0; font-size:.82rem; color:var(--text-muted); }
 .login-card{ display:flex; flex-direction:column; gap:14px; }
 .login-note{ margin:0; font-size:.72rem; color:var(--text-muted); text-align:center; }
+.login-guia-abierta{ font-size:.86rem; color:var(--text); background:var(--surface-2); border-radius:11px; padding:12px; text-align:left; }
 .brand-logo{ width:96px; height:auto; display:block; margin:0 auto 4px; }
 
 /* summary on list screen */
