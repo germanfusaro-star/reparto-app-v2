@@ -14,9 +14,9 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.svg"],
       manifest: {
-        name: "RepartoApp 2.0 (prueba) — San Lorenzo Star",
+        name: "RepartoApp 2.0 — San Lorenzo Star",
         short_name: "Reparto 2.0",
-        description: "Reparto y cobranza para choferes — San Lorenzo Star SRL (versión de prueba con devolución por artículo)",
+        description: "Reparto y cobranza para choferes — San Lorenzo Star SRL",
         theme_color: "#3f1c18",
         background_color: "#f7f3ec",
         display: "standalone",

@@ -70,7 +70,7 @@ export default function Login({ onIniciar, loading }) {
       <div className="login-wrap">
         <div className="brand-mark">
           <img className="brand-logo" src={logoIcon} alt="San Lorenzo Star" />
-          <h1>RepartoApp <span style={{ fontSize: ".5em", opacity: 0.7 }}>2.0 (prueba)</span></h1>
+          <h1>RepartoApp <span style={{ fontSize: ".5em", opacity: 0.7 }}>2.0</span></h1>
           <p>San Lorenzo Star · reparto y cobranza</p>
         </div>
         <form className="card login-card" onSubmit={handleSubmit}>
