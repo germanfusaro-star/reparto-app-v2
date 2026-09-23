@@ -14,6 +14,8 @@ import {
   collection,
   writeBatch,
   serverTimestamp,
+  query,
+  where,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { esperaCobroInmediato, compararPorCondicionYNombre } from "../lib/condiciones";
@@ -68,6 +70,11 @@ export async function crearGuiaDesdeManifiesto(manifiesto, choferNombre) {
     }));
     batch.set(clienteRef(guiaId, cliente.cliente_id), {
       clienteId: cliente.cliente_id,
+      // Código de cliente visible en Sigma2k (distinto de clienteId, que es un id interno
+      // de BigQuery) — ver api/guia.js. Guías creadas antes del 2026-09-17 no tienen este
+      // campo en Firestore (quedan con clienteCodigo undefined); las pantallas que lo
+      // muestran hacen fallback a clienteId en ese caso.
+      clienteCodigo: cliente.cliente_codigo ?? null,
       nombre: cliente.nombre,
       direccion: cliente.direccion,
       localidad: cliente.localidad,
@@ -114,6 +121,33 @@ export async function avisarFinReparto(guiaId) {
 export async function obtenerGuia(guiaId) {
   const snap = await getDoc(guiaRef(guiaId));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+/**
+ * Busca si este chofer ya tiene una guía sin cerrar en curso — pensado como red de
+ * seguridad para cuando la sesión guardada en el celular (ver lib/sesion.js) se pierde
+ * (se borró la memoria del navegador, entró desde el ícono de la app en vez del
+ * navegador, cambió de celular, etc.): así, con solo elegir su nombre de nuevo en el
+ * login, la app le ofrece retomar esa guía sin que tenga que acordarse ni volver a
+ * tipear el número. Devuelve la guía completa (o null si no tiene ninguna abierta).
+ *
+ * Nota: es una consulta por igualdad en dos campos (choferNombre + estado), no necesita
+ * un índice compuesto en Firestore.
+ */
+export async function buscarGuiaAbiertaDeChofer(choferNombre) {
+  if (!choferNombre) return null;
+  const q = query(
+    collection(db, "guias"),
+    where("choferNombre", "==", choferNombre),
+    where("estado", "==", "abierta")
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const guias = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  // Si por algún motivo raro quedara más de una abierta a la vez, se toma la más
+  // reciente por fecha de apertura.
+  guias.sort((a, b) => (b.fechaApertura?.toMillis?.() ?? 0) - (a.fechaApertura?.toMillis?.() ?? 0));
+  return guias[0];
 }
 
 /** Clientes de la guía, ordenados por condición de venta predeterminada y luego por nombre. */
@@ -228,7 +262,12 @@ export function calcularTotalesYAlertas(clientes) {
 
     if (c.estado === "pendiente") return; // no visitado: no genera alerta, sí queda fuera de los totales cobrados
     const esperaContado = esperaCobroInmediato(c.condicionPredeterminada);
-    if (esperaContado && c.montoCtaCte > 0) {
+    // Umbral para no alertar por centavos de diferencia de redondeo (p.ej. sumar varias
+    // líneas de artículo, o la percepción de IVA, puede dejar un resto de unos pocos
+    // centavos que no es una cuenta corriente real) — solo alerta si queda $1 o más sin
+    // cobrar / cobrado de más.
+    const UMBRAL_ALERTA = 1;
+    if (esperaContado && c.montoCtaCte >= UMBRAL_ALERTA) {
       alertas.push({
         tipo: "warn",
         clienteId: c.clienteId,
@@ -236,7 +275,7 @@ export function calcularTotalesYAlertas(clientes) {
         motivo: "Quedó en cuenta corriente siendo contado",
         detalle: `$${c.montoCtaCte.toLocaleString("es-AR")} sin cobrar.`,
       });
-    } else if (!esperaContado && c.montoCobrado > 0) {
+    } else if (!esperaContado && c.montoCobrado >= UMBRAL_ALERTA) {
       alertas.push({
         tipo: "info",
         clienteId: c.clienteId,
@@ -301,7 +340,7 @@ export async function listarTransferenciasDeGuia(guiaId) {
   const transferencias = [];
   clientes.forEach((c) => {
     (c.transferenciasDetalle || []).forEach((t) => {
-      transferencias.push({ clienteId: c.clienteId, clienteNombre: c.nombre, ...t });
+      transferencias.push({ clienteId: c.clienteId, clienteCodigo: c.clienteCodigo, clienteNombre: c.nombre, ...t });
     });
   });
   return transferencias;

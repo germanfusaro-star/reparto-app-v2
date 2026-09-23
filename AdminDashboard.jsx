@@ -4,9 +4,8 @@ import { calcularResumenGlobal } from "../../data/admin";
 import { cerrarSesionAdmin } from "../adminAuth";
 
 const FILTROS = [
-  { k: "hoy", label: "Hoy" },
+  { k: "actual", label: "Actual" },
   { k: "7d", label: "7 días" },
-  { k: "30d", label: "30 días" },
   { k: "todo", label: "Todo" },
 ];
 
@@ -20,11 +19,13 @@ function isoHaceNDias(n) {
   d.setDate(d.getDate() - n);
   return d.toISOString().slice(0, 10);
 }
+// "Actual" no filtra por la fecha de hoy (ver nota en calcularResumenGlobal, en
+// src/data/admin.js) — se resuelve allá adentro, buscando la fecha más reciente que
+// realmente haya entre las guías traídas.
 function rangoDe(filtro) {
+  if (filtro === "actual") return { actual: true };
   const hasta = isoHoy();
-  if (filtro === "hoy") return { desde: hasta, hasta };
   if (filtro === "7d") return { desde: isoHaceNDias(6), hasta };
-  if (filtro === "30d") return { desde: isoHaceNDias(29), hasta };
   return {}; // todo
 }
 

@@ -48,12 +48,29 @@ function dentroDeRango(fecha, desde, hasta) {
  * incidencias (parciales, no entregados, alertas de cta. cte.) juntas para revisar de un
  * vistazo qué pedidos tuvieron problemas y por qué.
  *
- * `filtro`: { desde, hasta } en formato "YYYY-MM-DD" (igual que guia.fecha), o vacíos
- * para traer todo lo que haya en los últimos MAX_GUIAS registros.
+ * `filtro`: { desde, hasta } en formato "YYYY-MM-DD" (igual que guia.fecha), vacíos para
+ * traer todo lo que haya en los últimos MAX_GUIAS registros, o { actual: true } para el
+ * filtro "Actual" (ver más abajo).
+ *
+ * "Actual" no es "hoy" por calendario: la FECHA de la guía es la del comprobante en
+ * Sigma2k, que suele quedar un día atrás del reparto real (o del sábado si el reparto es
+ * el lunes) — filtrar por la fecha de hoy siempre daba "sin guías". Detectado con Germán
+ * el 2026-09-16. En cambio, "Actual" toma la fecha más reciente que efectivamente haya
+ * entre las guías traídas y filtra por esa — así siempre muestra el último reparto
+ * cargado, sea cual sea su fecha real.
  */
 export async function calcularResumenGlobal(filtro = {}) {
-  const { desde, hasta } = filtro;
   const todasLasGuias = await listarGuiasRecientes();
+  let desde, hasta;
+  if (filtro.actual) {
+    const fechaMasReciente = todasLasGuias.reduce(
+      (max, g) => (g.fecha && (!max || g.fecha > max) ? g.fecha : max),
+      null
+    );
+    desde = hasta = fechaMasReciente;
+  } else {
+    ({ desde, hasta } = filtro);
+  }
   const guiasEnRango = todasLasGuias.filter((g) => dentroDeRango(g.fecha, desde, hasta));
 
   const filas = [];

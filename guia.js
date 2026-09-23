@@ -36,6 +36,13 @@ function getBigQueryClient() {
 const QUERY = `
   SELECT
     CLIENTE_ID AS cliente_id,
+    -- CLIENTE_ID es un id interno de BigQuery — NO es el código de cliente que se ve en
+    -- Sigma2k. Detectado con Germán el 2026-09-17: el PDF de rendición mostraba
+    -- CLIENTE_ID (ej. 800016182) como "código de cliente", pero en el ERP ese cliente
+    -- figura con otro código (ej. "004266"). El campo CLIENTE (STRING) es el que
+    -- coincide con el código visible en Sigma2k — verificado contra bq_ventas para el
+    -- cliente COSTARELLI CARLOS OSVALDO (CLIENTE_ID 800016182 → CLIENTE "004266").
+    CLIENTE AS cliente_codigo,
     CLIENTE_NOMBRE AS cliente_nombre,
     CLIENTE_DIRECCION AS cliente_direccion,
     CLIENTE_LOCALIDAD AS cliente_localidad,
@@ -44,7 +51,7 @@ const QUERY = `
     CLIENTE_LONGITUD AS cliente_lon,
     REPARTO AS reparto_codigo,
     REPARTO_NOMBRE AS reparto_nombre,
-    FECHA AS fecha,
+    FECHA AS comprobante_fecha,
     COMPROBANTE_NUMERO AS comprobante_numero,
     COMPROBANTE_TIPO AS comprobante_tipo,
     CONDICION_DE_VENTA AS condicion_venta,
@@ -58,12 +65,79 @@ const QUERY = `
     -- ITEM_NETO hacía que el total y el descuento por artículo quedaran ~20% de menos en
     -- cualquier comprobante con IVA discriminado. El campo se sigue llamando item_neto
     -- por compatibilidad con el resto del código, pero ahora trae el monto con IVA incluido.
-    ROUND(ITEM_FINAL, 2) AS item_neto
+    ROUND(ITEM_FINAL, 2) AS item_neto,
+    -- Esta sí es la mercadería sin IVA (sin los impuestos internos incluidos en ITEM_NETO
+    -- tampoco importan acá) — se usa solo como clave para encontrar la percepción de IVA
+    -- de este comprobante en bq_contable (ver PERCEPCION_QUERY más abajo), nunca se le
+    -- muestra al chofer.
+    ROUND(ITEM_NETO, 2) AS item_neto_sin_iva
   FROM \`sigma-star-2.sigmarepo.bq_ventas\`
   WHERE GUIA_ID = @guiaId
     AND COMPROBANTE_TIPO NOT IN ('NC', 'ND')
   ORDER BY cliente_nombre, comprobante_numero, item_descripcion
 `;
+
+// Detectado con Germán el 2026-09-15: a ciertos clientes (según su condición fiscal)
+// Sigma2k les suma al total de la factura una "Percepción de IVA a terceros" — no es
+// parte del IVA discriminado por artículo, es un concepto aparte que el sistema calcula
+// a nivel de comprobante. Ese monto NO existe en bq_ventas (se revisaron las ~140
+// columnas de la tabla, no está en ninguna) — vive en la tabla contable bq_contable,
+// como un asiento aparte (cuenta 21418 "PERCEP IVA A TERCEROS") dentro del mismo
+// movimiento contable (ID) de la factura, junto a la línea de mercadería (cuenta 41101
+// "VENTA DE MERCADERIAS") y la de IVA (21421). OJO: el campo SUBCUENTA (=CLIENTE_ID)
+// solo viene cargado en la línea "DEUDORES POR VENTAS" (11201) de cada movimiento — en
+// las demás líneas (mercadería, IVA, percepción) SUBCUENTA viene en 0, así que hay que
+// agrupar TODO el movimiento por ID primero (sin filtrar ni agrupar por SUBCUENTA) y
+// recién ahí sacar el cliente con MAX(SUBCUENTA) — filtrar por cliente antes de agrupar
+// descarta justo las líneas que se necesitan. El movimiento se liga a un comprobante de
+// bq_ventas cruzando fecha + cliente + el monto de mercadería sin IVA (tiene que
+// coincidir centavo a centavo entre las dos tablas — no hay un campo de
+// comprobante_numero en bq_contable para unir directo). Confirmado con el comprobante
+// 00178649 de la guía 4290: Neto $184.343,52 + IVA $36.295,08 + Percepción $5.185,01 =
+// Total $225.823,61 (coincide con Sigma2k al centavo). Solo afecta a una parte de los
+// comprobantes (~15% en los últimos 30 días) — el resto no tiene percepción y esta
+// consulta simplemente no devuelve movimiento para esos clientes.
+// Detectado el 2026-09-16: pasando @fechas/@clienteIds como parámetros de tipo ARRAY
+// (con `types: { fechas: ['DATE'], clienteIds: ['INT64'] }`), en producción (Vercel) la
+// consulta siempre devolvía 0 filas -- probada la misma consulta con los mismos valores
+// directo contra BigQuery (fuera del cliente de Node), sí devolvía resultados. No se pudo
+// determinar la causa exacta del bug de bindeo de parámetros tipo arreglo en ese cliente
+// dentro del entorno de Vercel, así que se lo evita: los valores (fechas y client_id que
+// ya extrajimos nosotros de BigQuery, no algo que tipee un usuario) se arman directo en el
+// texto de la consulta en vez de mandarse como parámetros.
+function construirPercepcionQuery(fechas, clienteIds) {
+  const fechasSql = fechas
+    .filter((f) => /^\d{4}-\d{2}-\d{2}$/.test(f))
+    .map((f) => `'${f}'`)
+    .join(', ');
+  const clienteIdsSql = clienteIds.filter((id) => Number.isInteger(id)).join(', ');
+  if (!fechasSql || !clienteIdsSql) return null;
+  return `
+    SELECT
+      fecha,
+      cliente_id,
+      venta_mercaderia,
+      percepcion_iva
+    FROM (
+      SELECT
+        FECHA AS fecha,
+        MAX(SUBCUENTA) AS cliente_id,
+        ROUND(SUM(IF(CUENTA_CONTABLE_NUMERO = 41101, HABER, 0)), 2) AS venta_mercaderia,
+        ROUND(SUM(IF(CUENTA_CONTABLE_NUMERO = 21418, HABER, 0)), 2) AS percepcion_iva
+      FROM \`sigma-star-2.sigmarepo.bq_contable\`
+      WHERE COMPROBANTE_CODIGO = 'VENT'
+        AND FECHA IN (${fechasSql})
+      GROUP BY ID, fecha
+    )
+    WHERE percepcion_iva > 0
+      AND cliente_id IN (${clienteIdsSql})
+  `;
+}
+
+function fechaComoTexto(fecha) {
+  if (!fecha) return null;
+  return fecha.value || fecha;
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'GET') {
@@ -99,6 +173,7 @@ module.exports = async (req, res) => {
       if (!clientesPorId.has(row.cliente_id)) {
         clientesPorId.set(row.cliente_id, {
           cliente_id: row.cliente_id,
+          cliente_codigo: row.cliente_codigo,
           nombre: row.cliente_nombre,
           direccion: row.cliente_direccion,
           localidad: row.cliente_localidad,
@@ -120,6 +195,10 @@ module.exports = async (req, res) => {
           espera_cobro_inmediato: esperaCobroInmediato(row.condicion_venta),
           monto: 0,
           items: [],
+          // Campos internos, solo para buscar la percepción de IVA en bq_contable más
+          // abajo — no se mandan en la respuesta final (ver PERCEPCION_QUERY arriba).
+          _fecha: fechaComoTexto(row.comprobante_fecha),
+          _montoMercaderiaSinIva: 0,
         });
       }
       const comprobante = cliente.comprobantesPorNumero.get(row.comprobante_numero);
@@ -133,7 +212,74 @@ module.exports = async (req, res) => {
         neto: itemNeto,
       });
       comprobante.monto = Math.round((comprobante.monto + itemNeto) * 100) / 100;
+      comprobante._montoMercaderiaSinIva =
+        Math.round((comprobante._montoMercaderiaSinIva + (row.item_neto_sin_iva || 0)) * 100) / 100;
       cliente.monto_total = Math.round((cliente.monto_total + itemNeto) * 100) / 100;
+    }
+
+    // Buscar la percepción de IVA a terceros de cada comprobante (cuando corresponde,
+    // ver PERCEPCION_QUERY más arriba) y sumarla al monto del comprobante y del cliente —
+    // si no se hace esto, el total le queda por debajo del de la factura real en Sigma2k
+    // para los clientes que tienen percepción.
+    const fechasSet = new Set();
+    const clienteIdsSet = new Set();
+    for (const cliente of clientesPorId.values()) {
+      for (const comp of cliente.comprobantesPorNumero.values()) {
+        if (comp._fecha) fechasSet.add(comp._fecha);
+        clienteIdsSet.add(cliente.cliente_id);
+      }
+    }
+    // Detectado con la guía 4295 (2026-09-16): el monto de mercadería sin IVA a veces
+    // difiere en 1 o 2 centavos entre bq_ventas (suma de ITEM_NETO redondeado por línea) y
+    // bq_contable (HABER de la cuenta 41101, redondeado del lado contable) — son dos
+    // cálculos distintos del lado de Sigma2k, no un error nuestro, pero un cruce por
+    // igualdad exacta de string perdía la percepción entera de esos comprobantes. Ahora se
+    // agrupa por fecha+cliente (sin el monto en la clave) y se busca, entre los movimientos
+    // de ese cliente en esa fecha, el que tenga el monto de mercadería MÁS CERCANO al del
+    // comprobante, aceptando hasta 2 centavos de diferencia — y una vez usado un movimiento
+    // no se lo vuelve a usar para otro comprobante del mismo cliente/día.
+    const TOLERANCIA_CENTAVOS = 0.02;
+    const percepcionPorClienteFecha = new Map();
+    let filasPercepcion = [];
+    const percepcionQuery = construirPercepcionQuery(Array.from(fechasSet), Array.from(clienteIdsSet));
+    if (percepcionQuery) {
+      [filasPercepcion] = await bigquery.query({ query: percepcionQuery });
+      filasPercepcion.forEach((f) => {
+        const clave = `${fechaComoTexto(f.fecha)}|${f.cliente_id}`;
+        if (!percepcionPorClienteFecha.has(clave)) percepcionPorClienteFecha.set(clave, []);
+        percepcionPorClienteFecha.get(clave).push({
+          ventaMercaderia: f.venta_mercaderia,
+          percepcionIva: f.percepcion_iva,
+          usada: false,
+        });
+      });
+    }
+
+    for (const cliente of clientesPorId.values()) {
+      for (const comp of cliente.comprobantesPorNumero.values()) {
+        const clave = `${comp._fecha}|${cliente.cliente_id}`;
+        const candidatos = percepcionPorClienteFecha.get(clave);
+        if (candidatos) {
+          let mejor = null;
+          let mejorDif = null;
+          for (const candidato of candidatos) {
+            if (candidato.usada) continue;
+            const dif = Math.abs(candidato.ventaMercaderia - comp._montoMercaderiaSinIva);
+            if (dif <= TOLERANCIA_CENTAVOS && (mejorDif === null || dif < mejorDif)) {
+              mejor = candidato;
+              mejorDif = dif;
+            }
+          }
+          if (mejor) {
+            mejor.usada = true;
+            comp.percepcion_iva = mejor.percepcionIva;
+            comp.monto = Math.round((comp.monto + mejor.percepcionIva) * 100) / 100;
+            cliente.monto_total = Math.round((cliente.monto_total + mejor.percepcionIva) * 100) / 100;
+          }
+        }
+        delete comp._fecha;
+        delete comp._montoMercaderiaSinIva;
+      }
     }
 
     const clientes = Array.from(clientesPorId.values()).map((c) => {
@@ -148,7 +294,7 @@ module.exports = async (req, res) => {
       guia_id: guiaId,
       reparto_codigo: rows[0].reparto_codigo,
       reparto_nombre: rows[0].reparto_nombre,
-      fecha: rows[0].fecha ? rows[0].fecha.value || rows[0].fecha : null,
+      fecha: fechaComoTexto(rows[0].comprobante_fecha),
       total_guia: totalGuia,
       clientes,
     });

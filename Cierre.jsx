@@ -67,7 +67,45 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
   function toggleDetalle(key) {
     setAbierto((a) => (a === key ? null : key));
   }
-  const clientesCtaCte = clientes.filter((c) => (c.montoCtaCte || 0) > 0);
+  // Detectado con Germán el 2026-09-16 (guía 4295): clientes que ya transfirieron el pago
+  // completo aparecían igual en "Clientes en cuenta corriente" mostrando $0 — quedaba un
+  // resto de centavos en montoCtaCte por una diferencia de redondeo entre el monto de la
+  // factura y el monto transferido, no una deuda real. Mismo criterio que ya se usa para
+  // no alertar por redondeo (ver UMBRAL_ALERTA en src/data/guias.js): si el saldo es menor
+  // a $1, no cuenta como cuenta corriente.
+  const UMBRAL_CTACTE = 1;
+  const clientesCtaCte = clientes.filter((c) => (c.montoCtaCte || 0) >= UMBRAL_CTACTE);
+  // Además del consolidado por artículo, el panel de "Devuelto" muestra por quién quedó
+  // la devolución — parcial o no entregado — con el importe devuelto de cada uno, para
+  // poder controlar contra qué cliente corresponde cada devolución sin tener que abrir la
+  // guía cliente por cliente.
+  const clientesConDevolucion = clientes.filter((c) => c.estado === "parcial" || c.estado === "no_entregado");
+
+  // El chofer necesita controlar el TOTAL físico devuelto por artículo (para cotejarlo
+  // contra la mercadería que trae de vuelta en el camión), no una fila por cada cliente
+  // que devolvió ese artículo — por eso acá se suman cantidad y monto de todas las líneas
+  // que comparten código (o descripción, si el artículo no tiene código cargado).
+  const articulosConsolidados = React.useMemo(() => {
+    const porArticulo = new Map();
+    articulosDevueltos.forEach((a) => {
+      const key = a.codigo ? `cod:${a.codigo}` : `desc:${a.descripcion}`;
+      const actual = porArticulo.get(key);
+      if (actual) {
+        actual.cantidadDevuelta += a.cantidadDevuelta;
+        actual.monto = Math.round((actual.monto + a.monto) * 100) / 100;
+        actual.clientes += 1;
+      } else {
+        porArticulo.set(key, {
+          codigo: a.codigo || "",
+          descripcion: a.descripcion,
+          cantidadDevuelta: a.cantidadDevuelta,
+          monto: a.monto,
+          clientes: 1,
+        });
+      }
+    });
+    return Array.from(porArticulo.values()).sort((a, b) => a.descripcion.localeCompare(b.descripcion));
+  }, [articulosDevueltos]);
 
   function descargarCsv() {
     const lines = [];
@@ -115,12 +153,40 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
     }
     lines.push("");
     lines.push(["Detalle de transferencias"].join(";"));
-    lines.push(["Cliente", "Referencia", "Monto"].join(";"));
+    // Mismas columnas que el reporte de CobrApp, a pedido de Germán — así se pueden
+    // conciliar los dos reportes igual (ver DATA_MODEL.md).
+    lines.push(
+      [
+        "Código cliente",
+        "Nombre",
+        "Monto",
+        "Fecha",
+        "Origen",
+        "Destino",
+        "Referencia",
+        "Banco de Origen",
+        "Banco de Destino",
+        "CBU destino",
+      ].join(";")
+    );
     if (transferencias.length === 0) {
       lines.push("Sin transferencias cargadas en esta guía");
     } else {
       transferencias.forEach((t) => {
-        lines.push([csvEscape(t.clienteNombre), csvEscape(t.referencia || "s/d"), montoCsv(t.monto)].join(";"));
+        lines.push(
+          [
+            csvEscape(t.clienteCodigo ?? t.clienteId ?? "s/d"),
+            csvEscape(t.clienteNombre),
+            montoCsv(t.monto),
+            csvEscape(t.fecha || "s/f"),
+            csvEscape(t.origen || "s/d"),
+            csvEscape(t.destino || "s/d"),
+            csvEscape(t.referencia || "s/d"),
+            csvEscape(t.bancoOrigen || "s/d"),
+            csvEscape(t.bancoDestino || "s/d"),
+            csvEscape(t.cbuDestino || "s/d"),
+          ].join(";")
+        );
       });
     }
     lines.push("");
@@ -164,6 +230,14 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
     showToast("CSV descargado.");
   }
 
+  function imprimirPdf() {
+    window.print();
+  }
+
+  function fechaHoraActual() {
+    return new Date().toLocaleString("es-AR", { dateStyle: "short", timeStyle: "short" });
+  }
+
   function compartirWhatsapp() {
     const alertasTxt =
       alertas.length === 0
@@ -185,7 +259,7 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
 
   return (
     <div className="screen">
-      <div className="app-bar">
+      <div className="app-bar no-print">
         <button className="back" type="button" aria-label="Volver" onClick={onVolver}>
           ←
         </button>
@@ -197,7 +271,7 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
         </div>
       </div>
 
-      <div className="scroll">
+      <div className="scroll no-print">
         {guia?.modificadoLuegoDeAviso && (
           <div className="alert-card">
             <span className="ic">⚠️</span>
@@ -241,20 +315,40 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
 
         {abierto === "devuelto" && (
           <div className="detalle-panel">
-            <span className="dp-title">Artículos devueltos ({articulosDevueltos.length})</span>
-            {articulosDevueltos.length === 0 ? (
+            <span className="dp-title">Artículos devueltos ({articulosConsolidados.length})</span>
+            {articulosConsolidados.length === 0 ? (
               <span className="articulos-note">No se marcó ningún artículo devuelto en esta guía.</span>
             ) : (
-              articulosDevueltos.map((a, i) => (
+              articulosConsolidados.map((a, i) => (
                 <div className="cheque-report-row" key={i}>
                   <div className="cr-main">
-                    <span className="cr-name">{a.clienteNombre}</span>
-                    <span className="cr-sub">
+                    <span className="cr-name">
                       {a.codigo && <>Cód. {a.codigo} · </>}
-                      {a.descripcion} · {a.cantidadDevuelta} un. · N° {a.comprobanteNumero}
+                      {a.descripcion}
+                    </span>
+                    <span className="cr-sub">
+                      {a.cantidadDevuelta} un. en total
+                      {a.clientes > 1 ? ` · ${a.clientes} clientes` : ""}
                     </span>
                   </div>
                   <span className="cr-amt">{fmt(a.monto)}</span>
+                </div>
+              ))
+            )}
+
+            <span className="dp-title" style={{ marginTop: 10 }}>
+              Por cliente ({clientesConDevolucion.length})
+            </span>
+            {clientesConDevolucion.length === 0 ? (
+              <span className="articulos-note">Ningún cliente quedó con devolución en esta guía.</span>
+            ) : (
+              clientesConDevolucion.map((c) => (
+                <div className="cheque-report-row" key={c.clienteId}>
+                  <div className="cr-main">
+                    <span className="cr-name">{c.nombre}</span>
+                    <span className="cr-sub">{c.estado === "no_entregado" ? "No entregó" : "Entrega parcial"}</span>
+                  </div>
+                  <span className="cr-amt">{fmt(c.montoDevuelto)}</span>
                 </div>
               ))
             )}
@@ -290,7 +384,11 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
                 <div className="cheque-report-row" key={i}>
                   <div className="cr-main">
                     <span className="cr-name">{t.clienteNombre}</span>
-                    <span className="cr-sub">{t.referencia || "Sin referencia"}</span>
+                    <span className="cr-sub">
+                      {t.origen ? `De ${t.origen}` : "Origen sin datos"}
+                      {t.bancoOrigen ? ` · ${t.bancoOrigen}` : ""}
+                      {t.referencia ? ` · ${t.referencia}` : ""}
+                    </span>
                   </div>
                   <span className="cr-amt">{fmt(t.monto)}</span>
                 </div>
@@ -388,6 +486,9 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
           <button className="btn btn-ghost" style={{ flex: 1 }} type="button" onClick={compartirWhatsapp}>
             ↗ WhatsApp
           </button>
+          <button className="btn btn-ghost" style={{ flex: 1 }} type="button" onClick={imprimirPdf}>
+            🖨 PDF
+          </button>
         </div>
 
         {onEliminarGuia && (
@@ -415,6 +516,225 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
           </div>
         )}
       </div>
+
+      {/* Reporte para imprimir/PDF (botón "🖨 PDF" de arriba, dispara window.print()) — no
+          se ve en pantalla (ver .print-report en styles.css), solo aparece al imprimir.
+          Es un documento aparte de lo que se ve arriba: se arma de nuevo con las mismas
+          tablas pero en blanco y negro, sin botones ni recuadros de color, pensado para
+          guardar en papel o mandar como PDF. */}
+      <div className="print-report">
+        <div className="pr-header">
+          <div>
+            <h1>San Lorenzo Star</h1>
+            <span>Rendición de reparto</span>
+          </div>
+          <div className="pr-header-meta">
+            <span>Guía #{guia?.guiaId}</span>
+            <span>Generado {fechaHoraActual()}</span>
+          </div>
+        </div>
+        <table className="pr-meta-table">
+          <tbody>
+            <tr>
+              <td>Reparto</td>
+              <td>{guia?.repartoNombre || "—"}</td>
+              <td>Chofer</td>
+              <td>{guia?.choferNombre || "—"}</td>
+            </tr>
+            <tr>
+              <td>Fecha guía</td>
+              <td>{guia?.fecha || "—"}</td>
+              <td>Estado</td>
+              <td>{guia?.estado === "cerrada" ? "Cerrada" : "Abierta"}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        {guia?.modificadoLuegoDeAviso && (
+          <p className="pr-warn">
+            ⚠ Se avisó que terminó el reparto y después se modificó algo — revisar los cambios antes de dar la
+            rendición por buena.
+          </p>
+        )}
+
+        <h2>Totales</h2>
+        <table className="pr-totales-table">
+          <tbody>
+            <tr>
+              <td>Total guía</td>
+              <td className="num">{fmt(totales.totalGuia)}</td>
+              <td>Transferencias</td>
+              <td className="num">{fmt(totales.totalTransferencia)}</td>
+            </tr>
+            <tr>
+              <td>Devuelto</td>
+              <td className="num">{fmt(totales.totalDevuelto)}</td>
+              <td>Efectivo</td>
+              <td className="num">{fmt(totales.totalEfectivo)}</td>
+            </tr>
+            <tr>
+              <td>Cta. corriente</td>
+              <td className="num">{fmt(totales.totalCtaCte)}</td>
+              <td>Cheques</td>
+              <td className="num">{fmt(totales.totalCheque)}</td>
+            </tr>
+            <tr className="pr-neto-row">
+              <td colSpan={3}>Neto a rendir (efectivo + cheque)</td>
+              <td className="num">{fmt(totales.netoARendir)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2>
+          Alertas {alertas.length > 0 ? `(${alertas.length})` : ""}
+        </h2>
+        {alertas.length === 0 ? (
+          <p>Sin alertas — lo cobrado coincide con la condición de venta de cada comprobante.</p>
+        ) : (
+          <ul className="pr-list">
+            {alertas.map((a, i) => (
+              <li key={i}>
+                <b>
+                  {a.clienteNombre} — {a.motivo}:
+                </b>{" "}
+                {a.detalle}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <h2>Detalle por cliente ({clientes.length})</h2>
+        <table className="pr-table">
+          <thead>
+            <tr>
+              <th>Cliente</th>
+              <th>Condición</th>
+              <th>Estado</th>
+              <th className="num">Total</th>
+              <th className="num">Devuelto</th>
+              <th className="num">Cobrado</th>
+              <th className="num">Cta. cte.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clientes.map((c) => (
+              <tr key={c.clienteId}>
+                <td>{c.nombre}</td>
+                <td>{describirCondicion(c.condicionPredeterminada)}</td>
+                <td>{ESTADO_LABEL[c.estado] || c.estado}</td>
+                <td className="num">{fmt(c.montoTotal)}</td>
+                <td className="num">{fmt(c.montoDevuelto)}</td>
+                <td className="num">{fmt(c.montoCobrado)}</td>
+                <td className="num">{fmt(c.montoCtaCte)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {cheques.length > 0 && (
+          <>
+            <h2>Detalle de cheques ({cheques.length})</h2>
+            <table className="pr-table">
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>N° cheque</th>
+                  <th>Banco</th>
+                  <th>Fecha</th>
+                  <th className="num">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cheques.map((ch, i) => (
+                  <tr key={i}>
+                    <td>{ch.clienteNombre}</td>
+                    <td>{ch.numero || "s/n"}</td>
+                    <td>{ch.banco || "s/d"}</td>
+                    <td>{ch.fecha || "s/f"}</td>
+                    <td className="num">{fmt(ch.monto)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {transferencias.length > 0 && (
+          <>
+            <h2>Detalle de transferencias ({transferencias.length})</h2>
+            {/* Mismas columnas que el CSV de rendición y que el reporte de CobrApp (ver
+                DATA_MODEL.md), salvo Referencia y Banco de origen: a pedido de Germán se
+                sacan del PDF (quedan en el CSV) para que la tabla entre más cómoda en la
+                hoja impresa. */}
+            <table className="pr-table pr-table-compact">
+              <thead>
+                <tr>
+                  <th>Cód. cliente</th>
+                  <th>Nombre</th>
+                  <th className="num">Monto</th>
+                  <th>Fecha</th>
+                  <th>Origen</th>
+                  <th>Destino</th>
+                  <th>Banco destino</th>
+                  <th>CBU destino</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transferencias.map((t, i) => (
+                  <tr key={i}>
+                    <td>{t.clienteCodigo ?? t.clienteId ?? "s/d"}</td>
+                    <td>{t.clienteNombre}</td>
+                    <td className="num">{fmt(t.monto)}</td>
+                    <td>{t.fecha || "s/f"}</td>
+                    <td>{t.origen || "s/d"}</td>
+                    <td>{t.destino || "s/d"}</td>
+                    <td>{t.bancoDestino || "s/d"}</td>
+                    <td>{t.cbuDestino || "s/d"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        {articulosConsolidados.length > 0 && (
+          <>
+            <h2>Artículos devueltos ({articulosConsolidados.length})</h2>
+            <table className="pr-table">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Descripción</th>
+                  <th className="num">Cantidad</th>
+                  <th className="num">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                {articulosConsolidados.map((a, i) => (
+                  <tr key={i}>
+                    <td>{a.codigo || "—"}</td>
+                    <td>{a.descripcion}</td>
+                    <td className="num">{a.cantidadDevuelta}</td>
+                    <td className="num">{fmt(a.monto)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        <div className="pr-firmas">
+          <div className="pr-firma">
+            <span className="pr-firma-linea" />
+            <span>Firma chofer</span>
+          </div>
+          <div className="pr-firma">
+            <span className="pr-firma-linea" />
+            <span>Firma administración</span>
+          </div>
+        </div>
+      </div>
+
       {toastNode}
     </div>
   );
