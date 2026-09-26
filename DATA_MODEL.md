@@ -538,12 +538,24 @@ transferencias (si hay), los artículos devueltos consolidados (si hay), y al fi
 líneas para firma (chofer / administración) — pensado para poder imprimirlo en papel y
 que quede firmado, no solo para guardarlo como archivo.
 
-La tabla de transferencias del PDF tiene las mismas 10 columnas que el CSV de rendición y
-que el reporte de CobrApp (Código cliente, Nombre, Monto, Fecha, Origen, Destino,
-Referencia, Banco de Origen, Banco de Destino, CBU destino) — a propósito, para poder
-conciliar los tres reportes sin reordenar nada. Por tener tantas columnas usa una clase
-aparte (`.pr-table-compact` en `src/styles.css`, letra más chica y las celdas envuelven el
-texto en vez de forzar una sola línea) para entrar en el ancho de una hoja normal.
+El CSV de rendición tiene las mismas 10 columnas que el reporte de CobrApp (Código
+cliente, Nombre, Monto, Fecha, Origen, Destino, Referencia, Banco de Origen, Banco de
+Destino, CBU destino) — a propósito, para poder conciliar los dos reportes sin reordenar
+nada.
+
+**La tabla de transferencias del PDF (2026-09-26) tiene solo 8 de esas 10 columnas** —
+sin Referencia ni Banco de Origen, a pedido de Germán, porque en la hoja impresa sobraban
+y hacían que cada fila envolviera en varias líneas. Usa una clase aparte
+(`.pr-table-transf` en `src/styles.css`) con un `<colgroup>` de ancho fijo por columna
+(en el JSX, `Cierre.jsx`): a los campos cortos de formato fijo — Código, Monto, Fecha,
+CBU destino (clase `.pr-nowrap`) — se les da el ancho justo para que nunca corten a la
+mitad ni pasen a una segunda línea; Nombre, Origen, Destino y Banco destino (texto libre)
+se quedan con el ancho que sobra y pueden pasar a una segunda línea si el valor es
+inusualmente largo (nombre de persona/empresa largo, por ejemplo "Distribuidora San
+Lorenzo Star" como Destino) — no hay forma de garantizar una sola línea para texto libre
+sin achicar la letra a un tamaño no legible o pasar la hoja entera a horizontal (no
+implementado; evaluar si hace falta más adelante). El CSV sigue con las 10 columnas
+completas — solo se recortó la vista impresa.
 
 Funciona igual desde la app del chofer (el botón está en el `Cierre` compartido, no es
 exclusivo del panel de admin), aunque el pedido puntual fue para poder sacarlo desde

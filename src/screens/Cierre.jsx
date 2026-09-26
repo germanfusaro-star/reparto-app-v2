@@ -662,37 +662,50 @@ export default function Cierre({ guia, cierreData, onVolver, onEliminarGuia }) {
         {transferencias.length > 0 && (
           <>
             <h2>Detalle de transferencias ({transferencias.length})</h2>
-            {/* Mismas columnas que el CSV de rendición y que el reporte de CobrApp, a pedido
-                de Germán (ver DATA_MODEL.md) — así se puede conciliar directamente contra
-                ese reporte sin tener que reordenar nada. */}
-            <table className="pr-table pr-table-compact">
+            {/* Mismas columnas que el CSV de rendición y que el reporte de CobrApp (ver
+                DATA_MODEL.md), salvo Referencia y Banco de origen: a pedido de Germán se
+                sacan del PDF (quedan en el CSV) para que la tabla entre más cómoda en la
+                hoja impresa. El colgroup de abajo (ancho fijo por columna, ver .pr-nowrap
+                en styles.css) le da a los campos cortos de formato fijo — código, monto,
+                fecha, CBU — el ancho justo para no cortarse nunca a la mitad; nombre,
+                origen, destino y banco quedan con lo que sobra y pueden pasar a una
+                segunda línea si el valor es inusualmente largo (nombre de persona/empresa
+                largo) — no hay forma de garantizar una sola línea para texto libre sin
+                achicar la letra a un tamaño no legible o pasar la hoja a horizontal. */}
+            <table className="pr-table pr-table-compact pr-table-transf">
+              <colgroup>
+                <col style={{ width: "8%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "13%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "20%" }} />
+              </colgroup>
               <thead>
                 <tr>
-                  <th>Cód. cliente</th>
+                  <th>Cód.</th>
                   <th>Nombre</th>
                   <th className="num">Monto</th>
                   <th>Fecha</th>
                   <th>Origen</th>
                   <th>Destino</th>
-                  <th>Referencia</th>
-                  <th>Banco origen</th>
-                  <th>Banco destino</th>
+                  <th>Banco dest.</th>
                   <th>CBU destino</th>
                 </tr>
               </thead>
               <tbody>
                 {transferencias.map((t, i) => (
                   <tr key={i}>
-                    <td>{t.clienteCodigo ?? t.clienteId ?? "s/d"}</td>
+                    <td className="pr-nowrap">{t.clienteCodigo ?? t.clienteId ?? "s/d"}</td>
                     <td>{t.clienteNombre}</td>
-                    <td className="num">{fmt(t.monto)}</td>
-                    <td>{t.fecha || "s/f"}</td>
+                    <td className="num pr-nowrap">{fmt(t.monto)}</td>
+                    <td className="pr-nowrap">{t.fecha || "s/f"}</td>
                     <td>{t.origen || "s/d"}</td>
                     <td>{t.destino || "s/d"}</td>
-                    <td>{t.referencia || "s/d"}</td>
-                    <td>{t.bancoOrigen || "s/d"}</td>
                     <td>{t.bancoDestino || "s/d"}</td>
-                    <td>{t.cbuDestino || "s/d"}</td>
+                    <td className="pr-nowrap">{t.cbuDestino || "s/d"}</td>
                   </tr>
                 ))}
               </tbody>
