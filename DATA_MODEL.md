@@ -445,13 +445,32 @@ Como esto no depende de arreglar la causa exacta (que varía según el celular),
 una segunda capa en `Login.jsx`, independiente de `localStorage`: al elegir su nombre,
 la app busca en Firestore (`buscarGuiaAbiertaDeChofer` en `src/data/guias.js`, query por
 `choferNombre + estado == "abierta"`, sin necesitar índice compuesto) si ese chofer ya
-tiene una guía sin cerrar. Si la encuentra, el campo "Número de guía" se reemplaza por un
-aviso ("Fulano ya tiene la guía #XXXX abierta — se retoma donde quedó") y el botón pasa a
-"Continuar reparto": alcanza con elegir el nombre para volver a entrar, sin tipear nada.
-Queda un enlace "No es esta guía, tipear otro número" por si el chofer realmente quiere
-arrancar una guía distinta sin cerrar la anterior (poco común, pero posible). Con esto,
-"loguearse de nuevo" (elegir el nombre) siempre alcanza para retomar el reparto en curso,
-más allá de si `localStorage` sobrevivió o no.
+tiene una guía sin cerrar. Si la encuentra, aparece un aviso ("Fulano ya tiene la guía
+#XXXX abierta") con un botón "Continuar guía #XXXX" — un solo toque para retomar, sin
+tipear nada.
+
+**Bug encontrado el 2026-09-26 (versión original de esta segunda capa):** Germán reportó
+que el problema seguía pasando — "cuando el repartidor sale de la app tienen que
+loguearse nuevamente". La primera versión reemplazaba el campo "Número de guía" por el
+aviso, Y deshabilitaba el botón de submit mientras la consulta a Firestore estaba en
+curso (`buscandoGuiaAbierta`). Un repartidor manejando entre repartos suele tener poca o
+nula señal — justo el escenario donde más se necesita este mecanismo — así que la
+consulta podía tardar varios segundos (o fallar) y en ese lapso el chofer quedaba sin
+poder ni siquiera tipear el número a mano: el único campo visible en ese momento era el
+aviso/botón bloqueado, no el campo de texto. No se pudo confirmar contra la Firestore de
+producción si además hay otra causa (no hay red desde este entorno hacia
+`firestore.googleapis.com` para probar la consulta directo — se confirmó por lógica que
+el fix de sesión sí llegó a producción, comparando el título de la página en vivo con los
+commits), pero este bug de bloqueo alcanza para explicar el síntoma reportado.
+
+**Arreglado:** el campo "Número de guía" ahora queda SIEMPRE visible y nunca se
+deshabilita — el aviso de guía abierta (cuando aparece) es un agregado aparte, con su
+propio botón "Continuar guía #XXXX", nunca un reemplazo del campo. La consulta a
+Firestore además tiene un límite de `TIMEOUT_BUSQUEDA_MS` (6s): si tarda más que eso (sin
+señal), se da por perdida y no bloquea nada — el chofer nunca esperó al campo de texto,
+solo al aviso opcional. Con esto, "loguearse de nuevo" (elegir el nombre) sigue
+alcanzando para retomar cuando hay señal, y cuando no la hay, el chofer puede tipear el
+número de guía como siempre sin haber estado bloqueado ni un segundo.
 
 ## Escaneo del comprobante de transferencia
 

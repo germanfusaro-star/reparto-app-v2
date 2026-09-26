@@ -3,6 +3,12 @@ import logoIcon from "../../assets/logo-icon.png";
 import { listarChoferes } from "../data/choferes";
 import { buscarGuiaAbiertaDeChofer } from "../data/guias";
 
+// La búsqueda de guía abierta necesita señal — si el celular está sin cobertura (muy
+// común manejando entre repartos) la consulta a Firestore puede tardar mucho en avisar
+// que no hay conexión. Con este límite, a los 6s se la da por perdida y el chofer sigue
+// pudiendo tipear el número de guía a mano sin haber estado nunca bloqueado esperando.
+const TIMEOUT_BUSQUEDA_MS = 6000;
+
 export default function Login({ onIniciar, loading }) {
   const [choferes, setChoferes] = React.useState([]);
   const [cargandoChoferes, setCargandoChoferes] = React.useState(true);
@@ -11,11 +17,13 @@ export default function Login({ onIniciar, loading }) {
   const [guiaId, setGuiaId] = React.useState("");
   // Red de seguridad para cuando la sesión guardada en el celular se perdió (ver
   // App.jsx / lib/sesion.js): si el chofer elegido ya tiene una guía abierta en
-  // Firestore, se la ofrecemos para retomar en vez de pedirle que tipee el número de
-  // nuevo — así "loguearse de nuevo" (elegir su nombre) alcanza para volver a entrar.
+  // Firestore, se la ofrecemos para retomar con un botón aparte, ADEMÁS del campo de
+  // número de guía de siempre (nunca lo reemplaza ni lo bloquea) — así, si la consulta
+  // tarda o falla por falta de señal, el chofer igual puede tipear el número a mano sin
+  // haber esperado nada.
   const [guiaAbierta, setGuiaAbierta] = React.useState(null);
   const [buscandoGuiaAbierta, setBuscandoGuiaAbierta] = React.useState(false);
-  const [forzarGuiaManual, setForzarGuiaManual] = React.useState(false);
+  const [ocultarGuiaAbierta, setOcultarGuiaAbierta] = React.useState(false);
 
   React.useEffect(() => {
     let cancelado = false;
@@ -35,16 +43,20 @@ export default function Login({ onIniciar, loading }) {
   React.useEffect(() => {
     let cancelado = false;
     setGuiaAbierta(null);
-    setForzarGuiaManual(false);
+    setOcultarGuiaAbierta(false);
     if (!chofer) return;
     setBuscandoGuiaAbierta(true);
-    buscarGuiaAbiertaDeChofer(chofer)
+    const conTimeout = Promise.race([
+      buscarGuiaAbiertaDeChofer(chofer),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), TIMEOUT_BUSQUEDA_MS)),
+    ]);
+    conTimeout
       .then((g) => {
         if (!cancelado) setGuiaAbierta(g);
       })
       .catch(() => {
-        // Si falla la búsqueda (p.ej. sin señal), no bloquea nada — el chofer sigue
-        // pudiendo tipear el número de guía a mano como siempre.
+        // Si falla o tarda demasiado (p.ej. sin señal), no bloquea nada — el campo de
+        // número de guía siempre estuvo disponible mientras tanto.
       })
       .finally(() => !cancelado && setBuscandoGuiaAbierta(false));
     return () => {
@@ -52,16 +64,16 @@ export default function Login({ onIniciar, loading }) {
     };
   }, [chofer]);
 
-  const mostrarGuiaAbierta = guiaAbierta && !forzarGuiaManual;
+  const mostrarGuiaAbierta = guiaAbierta && !ocultarGuiaAbierta;
+
+  function handleContinuar() {
+    if (!chofer || loading || !guiaAbierta) return;
+    onIniciar(chofer, guiaAbierta.id);
+  }
 
   function handleSubmit(e) {
     e.preventDefault();
-    if (!chofer || loading) return;
-    if (mostrarGuiaAbierta) {
-      onIniciar(chofer, guiaAbierta.id);
-      return;
-    }
-    if (!guiaId.trim()) return;
+    if (!chofer || loading || !guiaId.trim()) return;
     onIniciar(chofer, guiaId.trim());
   }
 
@@ -95,55 +107,43 @@ export default function Login({ onIniciar, loading }) {
               </select>
             )}
           </div>
-          {mostrarGuiaAbierta ? (
+          {mostrarGuiaAbierta && (
             <div className="field">
               <p className="login-note login-guia-abierta">
                 {chofer} ya tiene la guía <strong>#{guiaAbierta.id}</strong> abierta
-                {guiaAbierta.fecha ? ` (${guiaAbierta.fecha})` : ""} — se retoma donde quedó.
+                {guiaAbierta.fecha ? ` (${guiaAbierta.fecha})` : ""}.
               </p>
-              <button
-                type="button"
-                className="btn btn-link"
-                onClick={() => setForzarGuiaManual(true)}
-              >
-                No es esta guía, tipear otro número
+              <button type="button" className="btn btn-ghost btn-block" onClick={handleContinuar} disabled={loading}>
+                Continuar guía #{guiaAbierta.id}
+              </button>
+              <button type="button" className="btn btn-link" onClick={() => setOcultarGuiaAbierta(true)}>
+                No es esta guía
               </button>
             </div>
-          ) : (
-            <div className="field">
-              <label htmlFor="guiaInput">Número de guía</label>
-              <input
-                id="guiaInput"
-                inputMode="numeric"
-                value={guiaId}
-                onChange={(e) => setGuiaId(e.target.value)}
-                placeholder="Ej. 4277"
-              />
-              {forzarGuiaManual && guiaAbierta && (
-                <button
-                  type="button"
-                  className="btn btn-link"
-                  onClick={() => setForzarGuiaManual(false)}
-                >
-                  Volver a la guía #{guiaAbierta.id} abierta
-                </button>
-              )}
-            </div>
           )}
-          <button
-            className="btn btn-primary btn-block"
-            type="submit"
-            disabled={loading || !chofer || buscandoGuiaAbierta || (!mostrarGuiaAbierta && !guiaId.trim())}
-          >
-            {loading
-              ? "Buscando guía…"
-              : buscandoGuiaAbierta
-              ? "Revisando si ya tenés una guía abierta…"
-              : mostrarGuiaAbierta
-              ? "Continuar reparto"
-              : "Iniciar reparto"}
+          {/* El campo de número de guía queda siempre visible y nunca se bloquea — si la
+              revisión de arriba tarda o falla por falta de señal, el chofer igual puede
+              tipear el número a mano sin haber esperado nada (ver TIMEOUT_BUSQUEDA_MS). */}
+          <div className="field">
+            <label htmlFor="guiaInput">
+              {mostrarGuiaAbierta ? "O tipear otro número de guía" : "Número de guía"}
+            </label>
+            <input
+              id="guiaInput"
+              inputMode="numeric"
+              value={guiaId}
+              onChange={(e) => setGuiaId(e.target.value)}
+              placeholder="Ej. 4277"
+            />
+          </div>
+          <button className="btn btn-primary btn-block" type="submit" disabled={loading || !chofer || !guiaId.trim()}>
+            {loading ? "Buscando guía…" : "Iniciar reparto"}
           </button>
-          <p className="login-note">Solo este paso necesita señal — trae el manifiesto de BigQuery.</p>
+          <p className="login-note">
+            {buscandoGuiaAbierta
+              ? "Revisando si ya tenés una guía abierta…"
+              : "Solo este paso necesita señal — trae el manifiesto de BigQuery."}
+          </p>
         </form>
       </div>
     </div>
